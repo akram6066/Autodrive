@@ -93,6 +93,7 @@
 // }
 
 
+
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Category from "@/models/Category";
@@ -101,15 +102,14 @@ import fs from "fs/promises";
 import slugify from "slugify";
 import sharp from "sharp";
 
-// GET category by ID
+// ✅ GET category by ID
 export async function GET(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   await dbConnect();
-  const { id } = context.params;
 
-  const category = await Category.findById(id);
+  const category = await Category.findById(params.id);
   if (!category) {
     return NextResponse.json({ error: "Category not found" }, { status: 404 });
   }
@@ -117,13 +117,12 @@ export async function GET(
   return NextResponse.json(category);
 }
 
-// PUT - Update Category
+// ✅ PUT - Update Category
 export async function PUT(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   await dbConnect();
-  const { id } = context.params;
 
   const formData = await request.formData();
   const name = formData.get("name")?.toString().trim() ?? "";
@@ -135,7 +134,7 @@ export async function PUT(
 
   const slug = slugify(name, { lower: true });
 
-  const exists = await Category.findOne({ slug, _id: { $ne: id } });
+  const exists = await Category.findOne({ slug, _id: { $ne: params.id } });
   if (exists) {
     return NextResponse.json(
       { error: "Another category with this name already exists." },
@@ -168,21 +167,20 @@ export async function PUT(
   };
   if (imagePath) updateData.image = imagePath;
 
-  const updated = await Category.findByIdAndUpdate(id, updateData, {
+  const updated = await Category.findByIdAndUpdate(params.id, updateData, {
     new: true,
   });
 
   return NextResponse.json(updated);
 }
 
-// DELETE category by ID
+// ✅ DELETE category by ID
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
   await dbConnect();
-  const { id } = context.params;
 
-  await Category.findByIdAndDelete(id);
+  await Category.findByIdAndDelete(params.id);
   return NextResponse.json({ message: "Category deleted successfully" });
 }
