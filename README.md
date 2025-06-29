@@ -32,7 +32,25 @@
 ---
 
 ## 📁 Project Structure
-
+autodrive/
+├── app/                   # Next.js App Router pages
+│   ├── api/               # Backend API routes
+│   ├── checkout/          # Checkout pages and logic
+│   ├── dashboard/         # Admin dashboard pages
+│   ├── layout.tsx         # Global layout file
+│   └── page.tsx           # Home page
+├── components/            # Reusable UI components (Buttons, Inputs, etc.)
+├── lib/                   # Utility functions (e.g., auth, DB connect)
+├── models/                # Mongoose schema models
+├── public/                # Static assets (images, icons, etc.)
+├── store/                 # Zustand state management
+├── styles/ or globals.css # Global Tailwind and CSS styles
+├── .env.local             # Environment variables (ignored by Git)
+├── .gitignore             # Files to ignore in Git
+├── next.config.js         # Next.js configuration
+├── package.json           # Project metadata and dependencies
+├── tsconfig.json          # TypeScript configuration
+└── README.md              # Project documentation
 
 
 🧑‍💻 Author
