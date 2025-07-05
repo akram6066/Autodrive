@@ -10,10 +10,12 @@ interface BrandSize {
   size: string;
   price: number;
 }
+
 interface Brand {
   brandName: string;
   sizes: BrandSize[];
 }
+
 interface UpdateData {
   name: string;
   slug: string;
@@ -32,7 +34,7 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   await dbConnect();
-  const { id } = await context.params;
+ const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
 
   try {
     const product = await Product.findById(id).populate("category");
@@ -52,7 +54,7 @@ export async function PUT(
   context: { params: { id: string } }
 ) {
   await dbConnect();
-  const { id } = await context.params;
+const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
 
   try {
     const formData = await request.formData();
@@ -65,7 +67,7 @@ export async function PUT(
     const discountPriceStr = formData.get("discountPrice")?.toString().trim() || "";
     const isOfferStr = formData.get("isOffer")?.toString().trim() || "";
 
-    // Validate required fields
+    // Validation
     if (!name || !category || !description || !quantityStr || !brandsStr) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
@@ -90,16 +92,13 @@ export async function PUT(
       ? parseFloat(discountPriceStr)
       : undefined;
 
-    const isOffer = isOfferStr === "true" ? true : false;
+    const isOffer = isOfferStr === "true";
 
     const slug = slugify(name, { lower: true, strict: true });
 
     const exists = await Product.findOne({ slug, _id: { $ne: id } });
     if (exists) {
-      return NextResponse.json(
-        { error: "Another product with this name already exists" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Another product with this name already exists" }, { status: 400 });
     }
 
     const updateData: UpdateData = {
@@ -114,7 +113,7 @@ export async function PUT(
     if (discountPrice !== undefined) updateData.discountPrice = discountPrice;
     if (isOfferStr) updateData.isOffer = isOffer;
 
-    // Handle optional image upload
+    // Handle image
     const file = formData.get("image") as File | null;
     if (file && file.size > 0) {
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -128,13 +127,13 @@ export async function PUT(
       updateData.image = `/uploads/${fileName}`;
     }
 
-    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true });
+    const updated = await Product.findByIdAndUpdate(id, updateData, { new: true });
 
-    if (!updatedProduct) {
+    if (!updated) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    return NextResponse.json(updatedProduct);
+    return NextResponse.json(updated);
   } catch (error) {
     console.error("PUT update error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -147,13 +146,14 @@ export async function DELETE(
   context: { params: { id: string } }
 ) {
   await dbConnect();
-  const { id } = await context.params;
+  const { id } = context.params; // ✅ Fixed: No await
 
   try {
     const deleted = await Product.findByIdAndDelete(id);
     if (!deleted) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
+
     return NextResponse.json({ message: "Product deleted successfully" });
   } catch (error) {
     console.error("DELETE product error:", error);

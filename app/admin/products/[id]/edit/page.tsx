@@ -1,151 +1,173 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, ChangeEvent, FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios, { AxiosError } from "axios";
 import Image from "next/image";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-
 import AdminRoute from "@/components/AdminRoute";
-import BrandManager, { BrandType } from "@/components/BrandManager";
-import { productEditSchema } from "@/lib/validation/productSchema";
-
-const schema = productEditSchema;
-
-type FormData = z.infer<typeof schema>;
+import { UploadCloud, Loader2 } from "lucide-react";
 
 interface CategoryType {
   _id: string;
   name: string;
-  slug: string;
-  image?: string;
 }
 
-interface ProductAPI {
+interface SizeType {
+  size: string;
+  price: string;
+}
+
+interface ProductType {
   name: string;
-  category: CategoryType;
   description: string;
+  category: CategoryType;
   quantity: number;
-  discountPrice: number;
+  discountPrice?: number;
   isOffer: boolean;
   image: string;
-  brands: BrandType[];
-}
-
-interface AxiosErrorResponse {
-  error: string;
+  brands: {
+    brandName: string;
+    sizes: SizeType[];
+  }[];
 }
 
 export default function ProductEditPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
 
-  const [brands, setBrands] = useState<BrandType[]>([]);
   const [categories, setCategories] = useState<CategoryType[]>([]);
-  const [imagePreview, setImagePreview] = useState<string>("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [submitLoading, setSubmitLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      name: "",
-      category: "",
-      description: "",
-      quantity: "1",
-      discountPrice: "0",
-      isOffer: false,
-    },
+  const [form, setForm] = useState({
+    name: "",
+    category: "",
+    description: "",
+    quantity: "1",
+    discountPrice: "",
+    isOffer: false,
+    image: null as File | null,
+    imagePreview: null as string | null,
+    brands: [{ brandName: "", sizes: [{ size: "", price: "" }] }],
   });
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [catRes, prodRes] = await Promise.all([
+        setLoading(true);
+
+        const [categoryRes, productRes] = await Promise.all([
           axios.get<CategoryType[]>("/api/admin/categories"),
-          axios.get<ProductAPI>(`/api/admin/products/${id}`),
+          axios.get<ProductType>(`/api/admin/products/${id}`),
         ]);
 
-        const product = prodRes.data;
-        setCategories(catRes.data);
+        const product = productRes.data;
 
-        reset({
+        setCategories(categoryRes.data);
+
+        setForm({
           name: product.name,
-          category: product.category?._id || "",
+          category: product.category._id,
           description: product.description,
           quantity: product.quantity.toString(),
-          discountPrice: product.discountPrice.toString(),
+          discountPrice: product.discountPrice?.toString() || "",
           isOffer: product.isOffer,
-        });
-
-        setBrands(
-          product.brands.map((b) => ({
-            brandName: b.brandName,
-            sizes: b.sizes.map((s) => ({
-              size: s.size,
-              price: s.price.toString(),
+          image: null,
+          imagePreview: product.image || null,
+          brands: product.brands.map((brand) => ({
+            brandName: brand.brandName,
+            sizes: brand.sizes.map((size) => ({
+              size: size.size,
+              price: size.price.toString(),
             })),
-          }))
-        );
-
-        setImagePreview(product.image);
-      } catch (err: unknown) {
-        const error = err as AxiosError;
-        console.error(error);
-        setError("Failed to load product");
+          })),
+        });
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load product data.");
       } finally {
         setLoading(false);
       }
     }
 
     fetchData();
-  }, [id, reset]);
+  }, [id]);
 
-  const onSubmit = async (data: FormData) => {
-    setSubmitLoading(true);
+  const validateForm = () => {
+    if (!form.name.trim()) return "Product name is required";
+    if (!form.description.trim()) return "Description is required";
+    if (!form.category) return "Category is required";
+    if (!form.quantity || parseInt(form.quantity) <= 0)
+      return "Quantity must be greater than 0";
+
+    for (const brand of form.brands) {
+      if (!brand.brandName.trim()) return "Brand name is required";
+      for (const size of brand.sizes) {
+        if (!size.size.trim()) return "Size is required";
+        if (!size.price.trim() || parseFloat(size.price) <= 0)
+          return "Price must be greater than 0";
+      }
+    }
+
+    return null;
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      const file = e.target.files[0];
+      setForm({
+        ...form,
+        image: file,
+        imagePreview: URL.createObjectURL(file),
+      });
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
     setError(null);
 
-    try {
-      const formData = new FormData();
-      formData.append("name", data.name);
-      formData.append("category", data.category);
-      formData.append("description", data.description || "");
-      formData.append("quantity", data.quantity);
-      formData.append("discountPrice", data.discountPrice);
-      formData.append("isOffer", data.isOffer.toString());
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
 
+    try {
+      setSubmitLoading(true);
+
+      const formData = new FormData();
+      formData.append("name", form.name);
+      formData.append("category", form.category);
+      formData.append("description", form.description);
+      formData.append("quantity", form.quantity);
+      formData.append("discountPrice", form.discountPrice);
+      formData.append("isOffer", form.isOffer.toString());
       formData.append(
         "brands",
         JSON.stringify(
-          brands.map((b) => ({
+          form.brands.map((b) => ({
             brandName: b.brandName,
             sizes: b.sizes.map((s) => ({
               size: s.size,
-              price: s.price === "" ? 0 : parseFloat(s.price),
+              price: parseFloat(s.price),
             })),
           }))
         )
       );
 
-      if (imageFile) {
-        formData.append("image", imageFile);
+      if (form.image) {
+        formData.append("image", form.image);
       }
 
       await axios.put(`/api/admin/products/${id}`, formData);
+      alert("✅ Product updated successfully!");
       router.push("/admin/products");
-    } catch (err: unknown) {
-      const error = err as AxiosError<AxiosErrorResponse>;
-      console.error(error);
-      setError(error.response?.data?.error || "Failed to update product");
+    } catch (err) {
+      console.error(err);
+      const axiosErr = err as AxiosError<{ error: string }>;
+      setError(axiosErr.response?.data?.error || "Failed to update product.");
     } finally {
       setSubmitLoading(false);
     }
@@ -155,105 +177,162 @@ export default function ProductEditPage() {
 
   return (
     <AdminRoute>
-      <div className="pt-28 px-4 max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Edit Product</h1>
+      <div className="pt-20 px-4 max-w-5xl mx-auto">
+        <h1 className="text-3xl font-bold text-primary mb-8">Edit Product</h1>
 
         {error && (
-          <div className="bg-red-200 text-red-800 p-4 mb-6 rounded">
-            {error}
+          <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded-xl text-center shadow-md">
+            ⚠️ {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <input
-            type="text"
-            placeholder="Product name"
-            {...register("name")}
-            className="p-3 border w-full rounded"
-          />
-          {errors.name && <p className="text-red-600">{errors.name.message}</p>}
-
-          <select
-            {...register("category")}
-            className="p-3 border w-full rounded"
-          >
-            <option value="">Select Category</option>
-            {categories.map((cat) => (
-              <option key={cat._id} value={cat._id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
-          {errors.category && (
-            <p className="text-red-600">{errors.category.message}</p>
-          )}
-
-          <textarea
-            placeholder="Description"
-            {...register("description")}
-            rows={3}
-            className="p-3 border w-full rounded"
-          />
-
-          <input
-            type="number"
-            min={1}
-            placeholder="Quantity"
-            {...register("quantity")}
-            className="p-3 border w-full rounded"
-          />
-          {errors.quantity && (
-            <p className="text-red-600">{errors.quantity.message}</p>
-          )}
-
-          <input
-            type="number"
-            min={0}
-            placeholder="Discount Price"
-            {...register("discountPrice")}
-            className="p-3 border w-full rounded"
-          />
-          {errors.discountPrice && (
-            <p className="text-red-600">{errors.discountPrice.message}</p>
-          )}
-
-          <div className="flex items-center gap-2">
-            <input type="checkbox" {...register("isOffer")} />
-            <span>Mark as Offer</span>
-          </div>
-
-          <div>
-            {imagePreview && (
-              <Image
-                src={imagePreview}
-                alt="Product Preview"
-                width={150}
-                height={150}
-                className="rounded mb-2"
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Product Name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="p-3 border rounded-xl w-full"
               />
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  const file = e.target.files[0];
-                  setImageFile(file);
-                  setImagePreview(URL.createObjectURL(file));
+              <textarea
+                placeholder="Description"
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
                 }
-              }}
-              className="p-2 border rounded w-full"
-            />
+                className="p-3 border rounded-xl w-full"
+                rows={3}
+              />
+              <input
+                type="number"
+                min={1}
+                placeholder="Quantity"
+                value={form.quantity}
+                onChange={(e) =>
+                  setForm({ ...form, quantity: e.target.value })
+                }
+                className="p-3 border rounded-xl w-full"
+              />
+              <select
+                value={form.category}
+                onChange={(e) =>
+                  setForm({ ...form, category: e.target.value })
+                }
+                className="p-3 border rounded-xl w-full"
+              >
+                <option value="">Select Category</option>
+                {categories.map((cat) => (
+                  <option key={cat._id} value={cat._id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={0}
+                placeholder="Discount Price (optional)"
+                value={form.discountPrice}
+                onChange={(e) =>
+                  setForm({ ...form, discountPrice: e.target.value })
+                }
+                className="p-3 border rounded-xl w-full"
+              />
+              <div className="flex gap-2 items-center">
+                <input
+                  type="checkbox"
+                  checked={form.isOffer}
+                  onChange={(e) =>
+                    setForm({ ...form, isOffer: e.target.checked })
+                  }
+                />
+                <label>Mark as Offer</label>
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-center">
+              <div className="w-full aspect-square bg-gray-100 border-2 border-dashed rounded-xl flex justify-center items-center relative">
+                {form.imagePreview ? (
+                  <Image
+                    src={form.imagePreview}
+                    alt="Preview"
+                    fill
+                    className="object-cover rounded-xl"
+                  />
+                ) : (
+                  <div className="text-gray-400 text-center">
+                    <UploadCloud className="w-16 h-16 mx-auto" />
+                    <span>Upload Image</span>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+              </div>
+            </div>
           </div>
 
-          <BrandManager value={brands} onChange={setBrands} />
+          <h2 className="text-xl font-semibold text-primary">Brands & Sizes</h2>
+
+          {form.brands.map((brand, i) => (
+            <div
+              key={i}
+              className="bg-gray-50 border rounded-xl p-4 space-y-4"
+            >
+              <input
+                type="text"
+                placeholder="Brand Name"
+                value={brand.brandName}
+                onChange={(e) => {
+                  const updated = [...form.brands];
+                  updated[i].brandName = e.target.value;
+                  setForm({ ...form, brands: updated });
+                }}
+                className="p-3 border rounded-xl w-full"
+              />
+              {brand.sizes.map((size, j) => (
+                <div key={j} className="flex gap-4">
+                  <input
+                    type="text"
+                    placeholder="Size"
+                    value={size.size}
+                    onChange={(e) => {
+                      const updated = [...form.brands];
+                      updated[i].sizes[j].size = e.target.value;
+                      setForm({ ...form, brands: updated });
+                    }}
+                    className="p-3 border rounded-xl w-full"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Price (KES)"
+                    value={size.price}
+                    onChange={(e) => {
+                      const updated = [...form.brands];
+                      updated[i].sizes[j].price = e.target.value;
+                      setForm({ ...form, brands: updated });
+                    }}
+                    className="p-3 border rounded-xl w-full"
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
 
           <button
             type="submit"
             disabled={submitLoading}
-            className="bg-primary text-white py-3 px-6 rounded w-full text-lg disabled:opacity-60"
+            className="bg-primary text-white py-4 rounded-xl text-lg w-full flex justify-center"
           >
-            {submitLoading ? "Updating..." : "Update Product"}
+            {submitLoading ? (
+              <Loader2 className="animate-spin w-6 h-6" />
+            ) : (
+              "Update Product"
+            )}
           </button>
         </form>
       </div>
