@@ -1,28 +1,29 @@
 "use client";
 
-import AdminRoute from "@/components/AdminRoute";
-import { useEffect, useState, ChangeEvent } from "react";
-import axios from "axios";
-import { useRouter, useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import axios, { AxiosError } from "axios";
 import Image from "next/image";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
-// Types
-interface SizeType {
-  size: string;
-  price: string;
-}
-interface BrandType {
-  brandName: string;
-  sizes: SizeType[];
-}
+import AdminRoute from "@/components/AdminRoute";
+import BrandManager, { BrandType } from "@/components/BrandManager";
+import { productEditSchema } from "@/lib/validation/productSchema";
+
+const schema = productEditSchema;
+
+type FormData = z.infer<typeof schema>;
+
 interface CategoryType {
   _id: string;
   name: string;
   slug: string;
   image?: string;
 }
+
 interface ProductAPI {
-  _id: string;
   name: string;
   category: CategoryType;
   description: string;
@@ -30,281 +31,229 @@ interface ProductAPI {
   discountPrice: number;
   isOffer: boolean;
   image: string;
-  brands: {
-    brandName: string;
-    sizes: { size: string; price: number }[];
-  }[];
+  brands: BrandType[];
+}
+
+interface AxiosErrorResponse {
+  error: string;
 }
 
 export default function ProductEditPage() {
+  const { id } = useParams() as { id: string };
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [categories, setCategories] = useState<CategoryType[]>([]);
 
-  const [form, setForm] = useState<{
-    name: string;
-    category: string;
-    description: string;
-    quantity: string;
-    discountPrice: string;
-    isOffer: boolean;
-    imagePreview: string;
-    imageFile: File | null;
-    brands: BrandType[];
-  }>({
-    name: "",
-    category: "",
-    description: "",
-    quantity: "1",
-    discountPrice: "0",
-    isOffer: false,
-    imagePreview: "",
-    imageFile: null,
-    brands: [],
+  const [brands, setBrands] = useState<BrandType[]>([]);
+  const [categories, setCategories] = useState<CategoryType[]>([]);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [submitLoading, setSubmitLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: "",
+      category: "",
+      description: "",
+      quantity: "1",
+      discountPrice: "0",
+      isOffer: false,
+    },
   });
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [catRes, productRes] = await Promise.all([
+        const [catRes, prodRes] = await Promise.all([
           axios.get<CategoryType[]>("/api/admin/categories"),
           axios.get<ProductAPI>(`/api/admin/products/${id}`),
         ]);
 
+        const product = prodRes.data;
         setCategories(catRes.data);
-        const product = productRes.data;
 
-        setForm({
-          name: product.name ?? "",
-          category: product.category?._id ?? "",
-          description: product.description ?? "",
-          quantity: product.quantity?.toString() ?? "1",
-          discountPrice: product.discountPrice?.toString() ?? "0",
-          isOffer: product.isOffer ?? false,
-          imagePreview: product.image ?? "",
-          imageFile: null,
-          brands: product.brands.map((brand) => ({
-            brandName: brand.brandName,
-            sizes: brand.sizes.map((size) => ({
-              size: size.size,
-              price: size.price.toString(),
-            })),
-          })),
+        reset({
+          name: product.name,
+          category: product.category?._id || "",
+          description: product.description,
+          quantity: product.quantity.toString(),
+          discountPrice: product.discountPrice.toString(),
+          isOffer: product.isOffer,
         });
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load product data");
+
+        setBrands(
+          product.brands.map((b) => ({
+            brandName: b.brandName,
+            sizes: b.sizes.map((s) => ({
+              size: s.size,
+              price: s.price.toString(),
+            })),
+          }))
+        );
+
+        setImagePreview(product.image);
+      } catch (err: unknown) {
+        const error = err as AxiosError;
+        console.error(error);
+        setError("Failed to load product");
       } finally {
         setLoading(false);
       }
     }
+
     fetchData();
-  }, [id]);
+  }, [id, reset]);
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setForm({
-        ...form,
-        imageFile: e.target.files[0],
-        imagePreview: URL.createObjectURL(e.target.files[0]),
-      });
-    }
-  };
-
-  const handleBrandNameChange = (brandIndex: number, value: string) => {
-    const updatedBrands = [...form.brands];
-    updatedBrands[brandIndex].brandName = value;
-    setForm({ ...form, brands: updatedBrands });
-  };
-
-  const handleSizeChange = (
-    brandIndex: number,
-    sizeIndex: number,
-    field: keyof SizeType,
-    value: string
-  ) => {
-    const updatedBrands = [...form.brands];
-    updatedBrands[brandIndex].sizes[sizeIndex][field] = value;
-    setForm({ ...form, brands: updatedBrands });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const formData = new FormData();
-    formData.append("name", form.name);
-    formData.append("category", form.category);
-    formData.append("description", form.description);
-    formData.append("quantity", form.quantity);
-    formData.append("discountPrice", form.discountPrice);
-    formData.append("isOffer", form.isOffer ? "true" : "false");
-    formData.append(
-      "brands",
-      JSON.stringify(
-        form.brands.map((brand) => ({
-          brandName: brand.brandName,
-          sizes: brand.sizes.map((size) => ({
-            size: size.size,
-            price: parseFloat(size.price),
-          })),
-        }))
-      )
-    );
-
-    if (form.imageFile) {
-      formData.append("image", form.imageFile);
-    }
+  const onSubmit = async (data: FormData) => {
+    setSubmitLoading(true);
+    setError(null);
 
     try {
+      const formData = new FormData();
+      formData.append("name", data.name);
+      formData.append("category", data.category);
+      formData.append("description", data.description || "");
+      formData.append("quantity", data.quantity);
+      formData.append("discountPrice", data.discountPrice);
+      formData.append("isOffer", data.isOffer.toString());
+
+      formData.append(
+        "brands",
+        JSON.stringify(
+          brands.map((b) => ({
+            brandName: b.brandName,
+            sizes: b.sizes.map((s) => ({
+              size: s.size,
+              price: s.price === "" ? 0 : parseFloat(s.price),
+            })),
+          }))
+        )
+      );
+
+      if (imageFile) {
+        formData.append("image", imageFile);
+      }
+
       await axios.put(`/api/admin/products/${id}`, formData);
-      alert("✅ Product updated successfully");
       router.push("/admin/products");
-    } catch (err) {
-      console.error(err);
-      setError("Failed to update product");
+    } catch (err: unknown) {
+      const error = err as AxiosError<AxiosErrorResponse>;
+      console.error(error);
+      setError(error.response?.data?.error || "Failed to update product");
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
-  if (loading) return <div className="p-20 text-center">Loading...</div>;
+  if (loading) return <div className="p-10 text-center">Loading...</div>;
 
   return (
     <AdminRoute>
       <div className="pt-28 px-4 max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-primary mb-8">Edit Product</h1>
+        <h1 className="text-3xl font-bold mb-8">Edit Product</h1>
+
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 p-3 mb-6 rounded-xl text-center font-medium">
+          <div className="bg-red-200 text-red-800 p-4 mb-6 rounded">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label>Product Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="p-3 border rounded w-full"
-              required
-            />
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <input
+            type="text"
+            placeholder="Product name"
+            {...register("name")}
+            className="p-3 border w-full rounded"
+          />
+          {errors.name && <p className="text-red-600">{errors.name.message}</p>}
+
+          <select
+            {...register("category")}
+            className="p-3 border w-full rounded"
+          >
+            <option value="">Select Category</option>
+            {categories.map((cat) => (
+              <option key={cat._id} value={cat._id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+          {errors.category && (
+            <p className="text-red-600">{errors.category.message}</p>
+          )}
+
+          <textarea
+            placeholder="Description"
+            {...register("description")}
+            rows={3}
+            className="p-3 border w-full rounded"
+          />
+
+          <input
+            type="number"
+            min={1}
+            placeholder="Quantity"
+            {...register("quantity")}
+            className="p-3 border w-full rounded"
+          />
+          {errors.quantity && (
+            <p className="text-red-600">{errors.quantity.message}</p>
+          )}
+
+          <input
+            type="number"
+            min={0}
+            placeholder="Discount Price"
+            {...register("discountPrice")}
+            className="p-3 border w-full rounded"
+          />
+          {errors.discountPrice && (
+            <p className="text-red-600">{errors.discountPrice.message}</p>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input type="checkbox" {...register("isOffer")} />
+            <span>Mark as Offer</span>
           </div>
 
           <div>
-            <label>Category</label>
-            <select
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="p-3 border rounded w-full"
-            >
-              {categories.map((cat) => (
-                <option key={cat._id} value={cat._id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label>Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="p-3 border rounded w-full"
-              rows={3}
-            />
-          </div>
-
-          <div>
-            <label>Quantity</label>
-            <input
-              type="number"
-              min={1}
-              value={form.quantity}
-              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-              className="p-3 border rounded w-full"
-              required
-            />
-          </div>
-
-          <div>
-            <label>Discount Price</label>
-            <input
-              type="number"
-              min={0}
-              value={form.discountPrice}
-              onChange={(e) => setForm({ ...form, discountPrice: e.target.value })}
-              className="p-3 border rounded w-full"
-            />
-          </div>
-
-          <div className="flex gap-2 items-center">
-            <input
-              type="checkbox"
-              checked={form.isOffer}
-              onChange={(e) => setForm({ ...form, isOffer: e.target.checked })}
-            />
-            <label className="font-semibold">Mark as Offer</label>
-          </div>
-
-          <div>
-            <label>Product Image</label>
-            {form.imagePreview && (
+            {imagePreview && (
               <Image
-                src={form.imagePreview}
-                alt="Product Image"
-                width={200}
-                height={200}
-                className="rounded"
+                src={imagePreview}
+                alt="Product Preview"
+                width={150}
+                height={150}
+                className="rounded mb-2"
               />
             )}
             <input
               type="file"
               accept="image/*"
-              onChange={handleFileChange}
-              className="p-3 border rounded w-full"
+              onChange={(e) => {
+                if (e.target.files?.[0]) {
+                  const file = e.target.files[0];
+                  setImageFile(file);
+                  setImagePreview(URL.createObjectURL(file));
+                }
+              }}
+              className="p-2 border rounded w-full"
             />
           </div>
 
-          <div>
-            <h2 className="font-semibold text-lg text-primary mb-2">Brands & Sizes</h2>
-            {form.brands.map((brand, brandIndex) => (
-              <div key={brandIndex} className="bg-gray-100 rounded-xl p-4 mb-4">
-                <input
-                  type="text"
-                  value={brand.brandName}
-                  onChange={(e) => handleBrandNameChange(brandIndex, e.target.value)}
-                  className="p-3 border rounded w-full mb-3"
-                  placeholder="Brand Name"
-                  required
-                />
-                {brand.sizes.map((sizeObj, sizeIndex) => (
-                  <div key={sizeIndex} className="flex gap-4 mb-2">
-                    <input
-                      type="text"
-                      value={sizeObj.size}
-                      onChange={(e) => handleSizeChange(brandIndex, sizeIndex, "size", e.target.value)}
-                      className="p-3 border rounded w-1/2"
-                      placeholder="Size"
-                      required
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      value={sizeObj.price}
-                      onChange={(e) => handleSizeChange(brandIndex, sizeIndex, "price", e.target.value)}
-                      className="p-3 border rounded w-1/2"
-                      placeholder="Price"
-                      required
-                    />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+          <BrandManager value={brands} onChange={setBrands} />
 
-          <button type="submit" className="bg-primary text-white py-3 rounded w-full text-lg">
-            Update Product
+          <button
+            type="submit"
+            disabled={submitLoading}
+            className="bg-primary text-white py-3 px-6 rounded w-full text-lg disabled:opacity-60"
+          >
+            {submitLoading ? "Updating..." : "Update Product"}
           </button>
         </form>
       </div>

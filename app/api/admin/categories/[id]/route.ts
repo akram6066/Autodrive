@@ -1,186 +1,193 @@
-// import { NextResponse } from "next/server";
-// import dbConnect from "@/lib/dbConnect";
-// import Category from "@/models/Category";
-// import path from "path";
-// import fs from "fs/promises";
-// import slugify from "slugify";
-// import sharp from "sharp";
-
-// // GET category by ID
-// export async function GET(
-//   request: Request,
-//   context: { params: { id: string } }
-// ) {
-//   await dbConnect();
-//   const { id } = await Promise.resolve(context.params);
-
-//   const category = await Category.findById(id);
-//   if (!category) {
-//     return NextResponse.json({ error: "Category not found" }, { status: 404 });
-//   }
-
-//   return NextResponse.json(category);
-// }
-
-// // PUT - Update Category
-// export async function PUT(
-//   request: Request,
-//   context: { params: { id: string } }
-// ) {
-//   await dbConnect();
-//   const { id } = await Promise.resolve(context.params);
-
-//   const formData = await request.formData();
-//   const name = formData.get("name")?.toString().trim() ?? "";
-//   const file = formData.get("image") as File | null;
-
-//   if (!name) {
-//     return NextResponse.json({ error: "Category name is required" }, { status: 400 });
-//   }
-
-//   const slug = slugify(name, { lower: true });
-
-//   const exists = await Category.findOne({ slug, _id: { $ne: id } });
-//   if (exists) {
-//     return NextResponse.json(
-//       { error: "Another category with this name already exists." },
-//       { status: 400 }
-//     );
-//   }
-
-//   let imagePath: string | undefined;
-
-//   if (file && file.size > 0) {
-//     const buffer = Buffer.from(await file.arrayBuffer());
-//     const resized = await sharp(buffer)
-//       .resize(600, 600, { fit: "cover" })
-//       .jpeg({ quality: 80 })
-//       .toBuffer();
-
-//     const uploadDir = path.join(process.cwd(), "public/uploads/categories");
-//     await fs.mkdir(uploadDir, { recursive: true });
-
-//     const safeFileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
-//     const filePath = path.join(uploadDir, safeFileName);
-
-//     await fs.writeFile(filePath, resized);
-//     imagePath = `/uploads/categories/${safeFileName}`;
-//   }
-
-//   const updateData: { name: string; slug: string; image?: string } = {
-//     name,
-//     slug,
-//   };
-//   if (imagePath) updateData.image = imagePath;
-
-//   const updated = await Category.findByIdAndUpdate(id, updateData, {
-//     new: true,
-//   });
-
-//   return NextResponse.json(updated);
-// }
-
-// // DELETE category by ID
-// export async function DELETE(
-//   request: Request,
-//   context: { params: { id: string } }
-// ) {
-//   await dbConnect();
-//   const { id } = await Promise.resolve(context.params);
-
-//   await Category.findByIdAndDelete(id);
-//   return NextResponse.json({ message: "Category deleted successfully" });
-// }
-
-
-
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import Category from "@/models/Category";
+import Category, { ICategory } from "@/models/Category";
 import path from "path";
 import fs from "fs/promises";
 import slugify from "slugify";
 import sharp from "sharp";
 
-// ✅ GET category by ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  await dbConnect();
+// Image handling constants
+const IMAGE_UPLOAD_DIR = path.join(process.cwd(), "public/uploads/categories");
+const IMAGE_BASE_URL = "/uploads/categories";
+const IMAGE_SIZE = { width: 600, height: 600 };
 
-  const category = await Category.findById(params.id);
-  if (!category) {
-    return NextResponse.json({ error: "Category not found" }, { status: 404 });
-  }
+async function processImage(file: File): Promise<string> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const resized = await sharp(buffer)
+    .resize(IMAGE_SIZE.width, IMAGE_SIZE.height, { fit: "cover" })
+    .jpeg({ quality: 80 })
+    .toBuffer();
 
-  return NextResponse.json(category);
+  await fs.mkdir(IMAGE_UPLOAD_DIR, { recursive: true });
+
+  const safeFileName = `${Date.now()}-${file.name.replace(/\s+/g, "-")}`;
+  const filePath = path.join(IMAGE_UPLOAD_DIR, safeFileName);
+  await fs.writeFile(filePath, resized);
+
+  return `${IMAGE_BASE_URL}/${safeFileName}`;
 }
 
-// ✅ PUT - Update Category
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+// GET /api/admin/categories/[id]
+export async function GET(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
-  await dbConnect();
+  try {
+    await dbConnect();
+    const { id } = await context.params;
 
-  const formData = await request.formData();
-  const name = formData.get("name")?.toString().trim() ?? "";
-  const file = formData.get("image") as File | null;
+    const category = await Category.findById(id).lean<ICategory>();
+    if (!category) {
+      return NextResponse.json(
+        { success: false, error: "Category not found" },
+        { status: 404 }
+      );
+    }
 
-  if (!name) {
-    return NextResponse.json({ error: "Category name is required" }, { status: 400 });
-  }
-
-  const slug = slugify(name, { lower: true });
-
-  const exists = await Category.findOne({ slug, _id: { $ne: params.id } });
-  if (exists) {
+    return NextResponse.json({ success: true, data: category });
+  } catch (error) {
+    console.error("GET Error:", error);
     return NextResponse.json(
-      { error: "Another category with this name already exists." },
-      { status: 400 }
+      { success: false, error: "Internal server error" },
+      { status: 500 }
     );
   }
-
-  let imagePath: string | undefined;
-
-  if (file && file.size > 0) {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const resized = await sharp(buffer)
-      .resize(600, 600, { fit: "cover" })
-      .jpeg({ quality: 80 })
-      .toBuffer();
-
-    const uploadDir = path.join(process.cwd(), "public/uploads/categories");
-    await fs.mkdir(uploadDir, { recursive: true });
-
-    const safeFileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
-    const filePath = path.join(uploadDir, safeFileName);
-
-    await fs.writeFile(filePath, resized);
-    imagePath = `/uploads/categories/${safeFileName}`;
-  }
-
-  const updateData: { name: string; slug: string; image?: string } = {
-    name,
-    slug,
-  };
-  if (imagePath) updateData.image = imagePath;
-
-  const updated = await Category.findByIdAndUpdate(params.id, updateData, {
-    new: true,
-  });
-
-  return NextResponse.json(updated);
 }
 
-// ✅ DELETE category by ID
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+// PUT /api/admin/categories/[id]
+export async function PUT(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
-  await dbConnect();
+  try {
+    await dbConnect();
+    const { id } = await context.params;
+    const formData = await req.formData();
 
-  await Category.findByIdAndDelete(params.id);
-  return NextResponse.json({ message: "Category deleted successfully" });
+    const nameEntry = formData.get("name");
+    if (typeof nameEntry !== "string" || !nameEntry.trim()) {
+      return NextResponse.json(
+        { success: false, error: "Category name is required" },
+        { status: 400 }
+      );
+    }
+
+    const name = nameEntry.trim();
+    const slug = slugify(name, { lower: true, strict: true });
+    const file = formData.get("image") as File | null;
+
+    const existingCategory = await Category.findOne({
+      slug,
+      _id: { $ne: id },
+    }).lean<ICategory>();
+
+    if (existingCategory) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "A category with this name already exists",
+          existingId: existingCategory._id,
+        },
+        { status: 409 }
+      );
+    }
+
+    let imagePath: string | undefined;
+    if (file && file.size > 0) {
+      try {
+        imagePath = await processImage(file);
+
+        // Delete old image if exists
+        const oldCategory = await Category.findById(id).lean<ICategory>();
+        if (oldCategory?.image) {
+          const oldImagePath = path.join(process.cwd(), "public", oldCategory.image);
+          try {
+            await fs.unlink(oldImagePath);
+          } catch (err) {
+            console.warn("Old image not deleted:", err);
+          }
+        }
+      } catch (error) {
+        console.error("Image upload failed:", error);
+        return NextResponse.json(
+          { success: false, error: "Failed to upload image" },
+          { status: 400 }
+        );
+      }
+    }
+
+   // Inside the PUT handler
+
+const updateData: {
+  name: string;
+  slug: string;
+  image?: string;
+  updatedAt: Date;
+} = {
+  name,
+  slug,
+  ...(imagePath && { image: imagePath }),
+  updatedAt: new Date(),
+};
+
+
+    const updatedCategory = await Category.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    }).lean<ICategory>();
+
+    if (!updatedCategory) {
+      return NextResponse.json(
+        { success: false, error: "Category not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, data: updatedCategory });
+  } catch (error) {
+    console.error("PUT Error:", error);
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/admin/categories/[id]
+export async function DELETE(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    await dbConnect();
+    const { id } = await context.params;
+
+    const deletedCategory = await Category.findByIdAndDelete(id).lean<ICategory>();
+    if (!deletedCategory) {
+      return NextResponse.json(
+        { success: false, error: "Category not found" },
+        { status: 404 }
+      );
+    }
+
+    if (deletedCategory.image) {
+      const imagePath = path.join(process.cwd(), "public", deletedCategory.image);
+      try {
+        await fs.unlink(imagePath);
+      } catch (error) {
+        console.error("Failed to delete image file:", error);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { message: "Category deleted successfully" },
+    });
+  } catch (error) {
+    console.error("DELETE Error:", error);
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }

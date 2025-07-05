@@ -59,8 +59,13 @@ async function getProductsByCategoryId(categoryId: string): Promise<Product[]> {
 }
 
 // -------- Metadata for SEO --------
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const category = await getCategoryBySlug(params.slug);
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const category = await getCategoryBySlug(slug);
 
   if (!category) {
     return {
@@ -85,15 +90,23 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 }
 
 // -------- Page Component --------
-export default async function ProductsByCategory({ params }: { params: { slug: string } }) {
-  const category = await getCategoryBySlug(params.slug);
+export default async function ProductsByCategory({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
+  const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
   const products = await getProductsByCategoryId(category._id);
 
   return (
     <div className="max-w-7xl mx-auto py-16 px-4">
-      <h1 className="text-3xl font-bold mb-10 text-primary text-center">{category.name}</h1>
+      <h1 className="text-3xl font-bold mb-10 text-primary text-center">
+        {category.name}
+      </h1>
 
       {products.length === 0 ? (
         <div className="text-center text-xl text-gray-500 py-24">

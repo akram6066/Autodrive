@@ -4,16 +4,19 @@ import Category from "@/models/Category";
 
 // GET category by slug
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { slug: string } }
+  _req: NextRequest,
+  context: { params: Promise<{ slug: string }> }
 ) {
-  await dbConnect();
-
   try {
-    const category = await Category.findOne({ slug: params.slug });
+    await dbConnect();
+
+    const { slug } = await context.params;
+
+    const category = await Category.findOne({ slug });
     if (!category) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
+
     return NextResponse.json(category);
   } catch (err) {
     console.error("Error fetching category by slug:", err);

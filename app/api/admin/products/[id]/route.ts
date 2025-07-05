@@ -3,7 +3,7 @@ import dbConnect from "@/lib/dbConnect";
 import Product from "@/models/Product";
 import path from "path";
 import fs from "fs/promises";
-import slugify from "slugify";  // ✅ Added slugify
+import slugify from "slugify";
 
 // Interfaces
 interface BrandSize {
@@ -16,7 +16,7 @@ interface Brand {
 }
 interface UpdateData {
   name: string;
-  slug: string;  // ✅ Add slug to UpdateData interface
+  slug: string;
   category: string;
   description: string;
   quantity: number;
@@ -57,62 +57,74 @@ export async function PUT(
   try {
     const formData = await request.formData();
 
-    const name = formData.get("name")?.toString() ?? "";
-    const category = formData.get("category")?.toString() ?? "";
-    const description = formData.get("description")?.toString() ?? "";
-    const quantityStr = formData.get("quantity")?.toString() ?? "";
-    const brandsStr = formData.get("brands")?.toString() ?? "";
-    const discountPriceStr = formData.get("discountPrice")?.toString() ?? "";
-    const isOfferStr = formData.get("isOffer")?.toString() ?? "";
+    const name = formData.get("name")?.toString().trim() || "";
+    const category = formData.get("category")?.toString().trim() || "";
+    const description = formData.get("description")?.toString().trim() || "";
+    const quantityStr = formData.get("quantity")?.toString().trim() || "";
+    const brandsStr = formData.get("brands")?.toString().trim() || "";
+    const discountPriceStr = formData.get("discountPrice")?.toString().trim() || "";
+    const isOfferStr = formData.get("isOffer")?.toString().trim() || "";
 
+    // Validate required fields
     if (!name || !category || !description || !quantityStr || !brandsStr) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const quantity = parseInt(quantityStr);
     if (isNaN(quantity) || quantity <= 0) {
-      return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid quantity value" }, { status: 400 });
     }
 
     let brands: Brand[];
     try {
       brands = JSON.parse(brandsStr);
+      if (!Array.isArray(brands) || brands.length === 0) {
+        return NextResponse.json({ error: "Brands must be a non-empty array" }, { status: 400 });
+      }
     } catch {
-      return NextResponse.json({ error: "Invalid brands data" }, { status: 400 });
+      console.error("Invalid brands JSON:", brandsStr);
+      return NextResponse.json({ error: "Invalid brands format" }, { status: 400 });
     }
 
-    const discountPrice = discountPriceStr ? parseFloat(discountPriceStr) : undefined;
-    const isOffer = isOfferStr === "true";
+    const discountPrice = discountPriceStr && !isNaN(Number(discountPriceStr))
+      ? parseFloat(discountPriceStr)
+      : undefined;
 
-    // ✅ Generate slug
+    const isOffer = isOfferStr === "true" ? true : false;
+
     const slug = slugify(name, { lower: true, strict: true });
 
-    // ✅ Check duplicate slug excluding current product id
     const exists = await Product.findOne({ slug, _id: { $ne: id } });
     if (exists) {
-      return NextResponse.json({ error: "Another product with this name already exists" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Another product with this name already exists" },
+        { status: 400 }
+      );
     }
 
     const updateData: UpdateData = {
       name,
-      slug,  // ✅ Include slug in update
+      slug,
       category,
       description,
       quantity,
       brands,
-      discountPrice,
-      isOffer,
     };
 
+    if (discountPrice !== undefined) updateData.discountPrice = discountPrice;
+    if (isOfferStr) updateData.isOffer = isOffer;
+
+    // Handle optional image upload
     const file = formData.get("image") as File | null;
     if (file && file.size > 0) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const uploadDir = path.join(process.cwd(), "public/uploads");
       await fs.mkdir(uploadDir, { recursive: true });
 
-      const fileName = `${Date.now()}-${file.name}`;
+      const fileName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
       const filePath = path.join(uploadDir, fileName);
       await fs.writeFile(filePath, buffer);
+
       updateData.image = `/uploads/${fileName}`;
     }
 
@@ -124,7 +136,7 @@ export async function PUT(
 
     return NextResponse.json(updatedProduct);
   } catch (error) {
-    console.error("Update error:", error);
+    console.error("PUT update error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -144,7 +156,7 @@ export async function DELETE(
     }
     return NextResponse.json({ message: "Product deleted successfully" });
   } catch (error) {
-    console.error("Delete error:", error);
+    console.error("DELETE product error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
