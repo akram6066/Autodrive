@@ -28,13 +28,13 @@ interface UpdateData {
   image?: string;
 }
 
-// GET product by ID
+// ✅ GET product by ID
 export async function GET(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   await dbConnect();
- const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
 
   try {
     const product = await Product.findById(id).populate("category");
@@ -48,13 +48,13 @@ export async function GET(
   }
 }
 
-// PUT update product by ID
+// ✅ PUT product by ID
 export async function PUT(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   await dbConnect();
-const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
 
   try {
     const formData = await request.formData();
@@ -67,7 +67,6 @@ const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
     const discountPriceStr = formData.get("discountPrice")?.toString().trim() || "";
     const isOfferStr = formData.get("isOffer")?.toString().trim() || "";
 
-    // Validation
     if (!name || !category || !description || !quantityStr || !brandsStr) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
@@ -84,21 +83,30 @@ const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
         return NextResponse.json({ error: "Brands must be a non-empty array" }, { status: 400 });
       }
     } catch {
-      console.error("Invalid brands JSON:", brandsStr);
       return NextResponse.json({ error: "Invalid brands format" }, { status: 400 });
     }
 
-    const discountPrice = discountPriceStr && !isNaN(Number(discountPriceStr))
-      ? parseFloat(discountPriceStr)
-      : undefined;
+    const discountPrice =
+      discountPriceStr && !isNaN(Number(discountPriceStr))
+        ? parseFloat(discountPriceStr)
+        : undefined;
 
     const isOffer = isOfferStr === "true";
 
-    const slug = slugify(name, { lower: true, strict: true });
+    const firstBrand = brands[0];
+    const firstSize = firstBrand?.sizes?.[0]?.size || "default-size";
 
-    const exists = await Product.findOne({ slug, _id: { $ne: id } });
-    if (exists) {
-      return NextResponse.json({ error: "Another product with this name already exists" }, { status: 400 });
+    const slug = slugify(`${name}-${category}-${firstBrand.brandName}-${firstSize}`, {
+      lower: true,
+      strict: true,
+    });
+
+    const existingSlug = await Product.findOne({ slug, _id: { $ne: id } });
+    if (existingSlug) {
+      return NextResponse.json(
+        { error: "Another product with same name, brand, and size exists" },
+        { status: 400 }
+      );
     }
 
     const updateData: UpdateData = {
@@ -113,7 +121,6 @@ const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
     if (discountPrice !== undefined) updateData.discountPrice = discountPrice;
     if (isOfferStr) updateData.isOffer = isOffer;
 
-    // Handle image
     const file = formData.get("image") as File | null;
     if (file && file.size > 0) {
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -128,7 +135,6 @@ const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
     }
 
     const updated = await Product.findByIdAndUpdate(id, updateData, { new: true });
-
     if (!updated) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
@@ -140,13 +146,13 @@ const { id } = await Promise.resolve(context.params);// ✅ Fixed: No await
   }
 }
 
-// DELETE product by ID
+// ✅ DELETE product by ID
 export async function DELETE(
   request: Request,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   await dbConnect();
-  const { id } = context.params; // ✅ Fixed: No await
 
   try {
     const deleted = await Product.findByIdAndDelete(id);
