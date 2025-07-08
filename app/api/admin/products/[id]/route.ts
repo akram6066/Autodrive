@@ -30,10 +30,10 @@ interface UpdateData {
 
 // ✅ GET product by ID
 export async function GET(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params;
+  const { id } = await params;
   await dbConnect();
 
   try {
@@ -50,14 +50,14 @@ export async function GET(
 
 // ✅ PUT product by ID
 export async function PUT(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params;
+  const { id } = await params;
   await dbConnect();
 
   try {
-    const formData = await request.formData();
+    const formData = await req.formData();
 
     const name = formData.get("name")?.toString().trim() || "";
     const category = formData.get("category")?.toString().trim() || "";
@@ -148,10 +148,10 @@ export async function PUT(
 
 // ✅ DELETE product by ID
 export async function DELETE(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params;
+  const { id } = await params;
   await dbConnect();
 
   try {
