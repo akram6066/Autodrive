@@ -31,9 +31,9 @@ interface UpdateData {
 // ✅ GET product by ID
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> } // Keep as Promise for correctness
 ) {
-  const { id } = await params;
+  const { id } = await params; // Await params to resolve the Promise
   await dbConnect();
 
   try {
@@ -51,9 +51,9 @@ export async function GET(
 // ✅ PUT product by ID
 export async function PUT(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> } // Keep as Promise
 ) {
-  const { id } = await params;
+  const { id } = await params; // Await params to resolve the Promise
   await dbConnect();
 
   try {
@@ -149,9 +149,9 @@ export async function PUT(
 // ✅ DELETE product by ID
 export async function DELETE(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> } // Keep as Promise
 ) {
-  const { id } = await params;
+  const { id } = await params; // Await params to resolve the Promise
   await dbConnect();
 
   try {
