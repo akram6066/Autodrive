@@ -6,14 +6,13 @@ import Footer from "@/components/layout/Footer";
 export default function HomePage() {
   return (
     <div className="bg-background">
-      
       <Hero />
-  
       <CategorySection />
       <FeaturedProducts />
-     
-      
-      <Footer/>
+      <Footer />
     </div>
   );
 }
+
+// Force dynamic rendering to avoid prerendering issues
+export const dynamic = "force-dynamic";

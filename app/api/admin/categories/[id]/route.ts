@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Category, { ICategory } from "@/models/Category";
 import path from "path";
@@ -29,14 +29,14 @@ async function processImage(file: File): Promise<string> {
 
 // GET /api/admin/categories/[id]
 export async function GET(
-  _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    const { id } = await context.params;
+    const { id } = await params;
 
-    const category = await Category.findById(id).lean<ICategory>();
+    const category = await Category.findById(id).lean() as ICategory | null;
     if (!category) {
       return NextResponse.json(
         { success: false, error: "Category not found" },
@@ -57,11 +57,11 @@ export async function GET(
 // PUT /api/admin/categories/[id]
 export async function PUT(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    const { id } = await context.params;
+    const { id } = await params;
     const formData = await req.formData();
 
     const nameEntry = formData.get("name");
@@ -79,7 +79,7 @@ export async function PUT(
     const existingCategory = await Category.findOne({
       slug,
       _id: { $ne: id },
-    }).lean<ICategory>();
+    }).lean() as ICategory | null;
 
     if (existingCategory) {
       return NextResponse.json(
@@ -98,13 +98,13 @@ export async function PUT(
         imagePath = await processImage(file);
 
         // Delete old image if exists
-        const oldCategory = await Category.findById(id).lean<ICategory>();
+        const oldCategory = await Category.findById(id).lean() as ICategory | null;
         if (oldCategory?.image) {
           const oldImagePath = path.join(process.cwd(), "public", oldCategory.image);
           try {
             await fs.unlink(oldImagePath);
           } catch (err) {
-            console.warn("Old image not deleted:", err);
+            console.warn("Failed to delete old image:", err);
           }
         }
       } catch (error) {
@@ -116,25 +116,22 @@ export async function PUT(
       }
     }
 
-   // Inside the PUT handler
-
-const updateData: {
-  name: string;
-  slug: string;
-  image?: string;
-  updatedAt: Date;
-} = {
-  name,
-  slug,
-  ...(imagePath && { image: imagePath }),
-  updatedAt: new Date(),
-};
-
+    const updateData: {
+      name: string;
+      slug: string;
+      image?: string;
+      updatedAt: Date;
+    } = {
+      name,
+      slug,
+      ...(imagePath && { image: imagePath }),
+      updatedAt: new Date(),
+    };
 
     const updatedCategory = await Category.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
-    }).lean<ICategory>();
+    }).lean() as ICategory | null;
 
     if (!updatedCategory) {
       return NextResponse.json(
@@ -155,14 +152,14 @@ const updateData: {
 
 // DELETE /api/admin/categories/[id]
 export async function DELETE(
-  _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    const { id } = await context.params;
+    const { id } = await params;
 
-    const deletedCategory = await Category.findByIdAndDelete(id).lean<ICategory>();
+    const deletedCategory = await Category.findByIdAndDelete(id).lean() as ICategory | null;
     if (!deletedCategory) {
       return NextResponse.json(
         { success: false, error: "Category not found" },
@@ -175,7 +172,7 @@ export async function DELETE(
       try {
         await fs.unlink(imagePath);
       } catch (error) {
-        console.error("Failed to delete image file:", error);
+        console.warn("Failed to delete image file:", error);
       }
     }
 
@@ -186,7 +183,7 @@ export async function DELETE(
   } catch (error) {
     console.error("DELETE Error:", error);
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
+      { success: false, error: "  Internal server error" },
       { status: 500 }
     );
   }
