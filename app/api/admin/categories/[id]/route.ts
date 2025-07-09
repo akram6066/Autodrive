@@ -30,11 +30,11 @@ async function processImage(file: File): Promise<string> {
 // GET /api/admin/categories/[id]
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    const { id } = params;
+    const { id } = await context.params; // Await params
 
     const category = await Category.findById(id).lean<ICategory>();
     if (!category) {
@@ -57,11 +57,11 @@ export async function GET(
 // PUT /api/admin/categories/[id]
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    const { id } = params;
+    const { id } = await context.params; // Await params
     const formData = await req.formData();
 
     const nameEntry = formData.get("name");
@@ -153,11 +153,11 @@ export async function PUT(
 // DELETE /api/admin/categories/[id]
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    const { id } = params;
+    const { id } = await context.params; // Await params
 
     const deletedCategory = await Category.findByIdAndDelete(id).lean<ICategory>();
     if (!deletedCategory) {
