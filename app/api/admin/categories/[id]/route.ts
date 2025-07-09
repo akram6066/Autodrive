@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Category, { ICategory } from "@/models/Category";
 import path from "path";
@@ -29,14 +29,14 @@ async function processImage(file: File): Promise<string> {
 
 // GET /api/admin/categories/[id]
 export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  _req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
     await dbConnect();
-    const { id } = await params;
+    const { id } = params;
 
-    const category = await Category.findById(id).lean() as ICategory | null;
+    const category = await Category.findById(id).lean<ICategory>();
     if (!category) {
       return NextResponse.json(
         { success: false, error: "Category not found" },
@@ -57,11 +57,11 @@ export async function GET(
 // PUT /api/admin/categories/[id]
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     await dbConnect();
-    const { id } = await params;
+    const { id } = params;
     const formData = await req.formData();
 
     const nameEntry = formData.get("name");
@@ -79,7 +79,7 @@ export async function PUT(
     const existingCategory = await Category.findOne({
       slug,
       _id: { $ne: id },
-    }).lean() as ICategory | null;
+    }).lean<ICategory>();
 
     if (existingCategory) {
       return NextResponse.json(
@@ -98,13 +98,13 @@ export async function PUT(
         imagePath = await processImage(file);
 
         // Delete old image if exists
-        const oldCategory = await Category.findById(id).lean() as ICategory | null;
+        const oldCategory = await Category.findById(id).lean<ICategory>();
         if (oldCategory?.image) {
           const oldImagePath = path.join(process.cwd(), "public", oldCategory.image);
           try {
             await fs.unlink(oldImagePath);
           } catch (err) {
-            console.warn("Failed to delete old image:", err);
+            console.warn("Old image not deleted:", err);
           }
         }
       } catch (error) {
@@ -131,7 +131,7 @@ export async function PUT(
     const updatedCategory = await Category.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
-    }).lean() as ICategory | null;
+    }).lean<ICategory>();
 
     if (!updatedCategory) {
       return NextResponse.json(
@@ -152,14 +152,14 @@ export async function PUT(
 
 // DELETE /api/admin/categories/[id]
 export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  _req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
     await dbConnect();
-    const { id } = await params;
+    const { id } = params;
 
-    const deletedCategory = await Category.findByIdAndDelete(id).lean() as ICategory | null;
+    const deletedCategory = await Category.findByIdAndDelete(id).lean<ICategory>();
     if (!deletedCategory) {
       return NextResponse.json(
         { success: false, error: "Category not found" },
@@ -172,7 +172,7 @@ export async function DELETE(
       try {
         await fs.unlink(imagePath);
       } catch (error) {
-        console.warn("Failed to delete image file:", error);
+        console.error("Failed to delete image file:", error);
       }
     }
 
@@ -183,7 +183,7 @@ export async function DELETE(
   } catch (error) {
     console.error("DELETE Error:", error);
     return NextResponse.json(
-      { success: false, error: "  Internal server error" },
+      { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
