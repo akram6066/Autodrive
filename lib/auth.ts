@@ -1,19 +1,25 @@
+// lib/authOptions.ts
+
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { NextAuthOptions } from "next-auth";
+
 import dbConnect from "@/lib/dbConnect";
 import clientPromise from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
+import AdapterAccount  from "@/models/Account"; // your adapter account model
 
 export const authOptions: NextAuthOptions = {
-  adapter: MongoDBAdapter(clientPromise), // Use MongoDB for session storage
+  adapter: MongoDBAdapter(clientPromise),
+
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
+
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -22,24 +28,25 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
+          throw new Error("Missing email or password.");
         }
 
         await dbConnect();
+
         const user = await User.findOne({ email: credentials.email });
 
         if (!user) {
-          throw new Error("No user found");
+          throw new Error("No user found with this email.");
         }
 
-        // Check if user has a password (for non-Google accounts)
         if (!user.password) {
-          throw new Error("Use Google to login");
+          throw new Error("This account uses Google login. Please sign in with Google.");
         }
 
         const isValid = await bcrypt.compare(credentials.password, user.password);
+
         if (!isValid) {
-          throw new Error("Invalid password");
+          throw new Error("Invalid email or password.");
         }
 
         return {
@@ -52,42 +59,78 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+
   session: {
-    strategy: "jwt", // Use JWT for session management
+    strategy: "jwt",
   },
+
   secret: process.env.NEXTAUTH_SECRET,
+
   pages: {
-    signIn: "/login", // Custom sign-in page
+    signIn: "/login",
   },
+
   callbacks: {
     async signIn({ user, account }) {
       await dbConnect();
 
       if (account?.provider === "google") {
-        let existingUser = await User.findOne({ email: user.email });
+        const existingUser = await User.findOne({ email: user.email });
 
-        if (!existingUser) {
-          existingUser = await User.create({
+        if (existingUser) {
+          // 🚫 Prevent Google sign-in for admins
+          if (existingUser.role === "admin") {
+            return false;
+          }
+
+          // ✅ Link Google to existing user if not already linked
+          const alreadyLinked = await AdapterAccount.findOne({
+            userId: existingUser._id,
+            provider: "google",
+          });
+
+          if (!alreadyLinked) {
+            await AdapterAccount.create({
+              userId: existingUser._id,
+              provider: account.provider,
+              type: account.type,
+              providerAccountId: account.providerAccountId,
+              access_token: account.access_token,
+              expires_at: account.expires_at,
+              token_type: account.token_type,
+              scope: account.scope,
+              id_token: account.id_token,
+            });
+          }
+
+          user.id = existingUser._id.toString();
+          user.role = existingUser.role ?? "user";
+        } else {
+          // 👤 Create new user for first-time Google sign-in
+          const newUser = await User.create({
             name: user.name,
             email: user.email,
             image: user.image,
             emailVerified: true,
             role: "user",
           });
-        }
 
-        user.role = existingUser.role || "user";
+          user.id = newUser._id.toString();
+          user.role = newUser.role;
+        }
       }
 
-      return true; // Allow sign-in
+      return true;
     },
+
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = user.role || "user";
+        token.role = user.role ?? "user";
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;

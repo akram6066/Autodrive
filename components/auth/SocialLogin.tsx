@@ -2,24 +2,41 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { FcGoogle } from "react-icons/fc";
 import { Loader2 } from "lucide-react";
 
 export default function SocialLogin() {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
+    setError("");
+
     try {
-      await signIn("google", { callbackUrl: "/" }); // after successful login, redirect to home page
+      const result = await signIn("google", {
+        callbackUrl: "/",
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Access denied. You may not have permission to sign in with Google.");
+        setLoading(false);
+      } else {
+        // Let useSession/useEffect on login page handle redirection
+        router.refresh(); // Ensures session updates immediately
+      }
     } catch (err) {
       console.error("Google Sign In Error", err);
+      setError("Something went wrong. Please try again.");
       setLoading(false);
     }
   };
 
   return (
-    <div>
+    <div className="space-y-2">
       <button
         onClick={handleGoogleSignIn}
         disabled={loading}
@@ -34,6 +51,8 @@ export default function SocialLogin() {
         )}
         {loading ? "Signing in..." : "Continue with Google"}
       </button>
+
+      {error && <p className="text-sm text-red-500 text-center">{error}</p>}
     </div>
   );
 }
