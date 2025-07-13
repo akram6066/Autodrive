@@ -30,7 +30,7 @@ export default function ProductsFilters({ defaultCategories }: Props) {
     if (categories.length === 0) {
       axios.get("/api/admin/categories").then((res) => setCategories(res.data));
     }
-  }, []);
+  }, [categories.length]); // ✅ fixed: added dependency
 
   const applyFilters = () => {
     const params = new URLSearchParams();

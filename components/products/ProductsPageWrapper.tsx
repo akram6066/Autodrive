@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams,  } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import axios from "axios";
 import ProductsGrid from "./ProductsGrid";
 
@@ -26,28 +26,26 @@ interface ProductResponse {
 
 export default function ProductsPageWrapper() {
   const searchParams = useSearchParams();
-//   const router = useRouter();
+  const query = searchParams.toString(); // ✅ Extracted to static variable
 
   const [products, setProducts] = useState<Product[]>([]);
-  //const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchProducts();
-  }, [searchParams.toString()]);
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get<ProductResponse>(`/api/products?${query}`);
+        setProducts(res.data.products);
+      } catch (err) {
+        console.error("Failed to fetch products", err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.get<ProductResponse>(`/api/products?${searchParams.toString()}`);
-      setProducts(res.data.products);
-    //   setTotal(res.data.total);
-    } catch (err) {
-      console.error("Failed to fetch products", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchProducts();
+  }, [query]); // ✅ Static dependency
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-16">

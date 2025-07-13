@@ -3,7 +3,7 @@
 import AdminRoute from "@/components/AdminRoute";
 import axios, { AxiosError } from "axios";
 import Image from "next/image";
-import { useEffect, useState, ChangeEvent, FormEvent } from "react";
+import { useEffect, useState, useCallback, ChangeEvent, FormEvent } from "react";
 
 type CategoryType = {
   _id: string;
@@ -21,23 +21,23 @@ export default function AdminCategories() {
   const [editingCategory, setEditingCategory] = useState<CategoryType | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
+  const showMessage = (text: string, type: "success" | "error") => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage(null), 3000);
+  };
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const res = await axios.get("/api/admin/categories");
       setCategories(res.data);
     } catch {
       showMessage("Failed to fetch categories", "error");
     }
-  };
+  }, []);
 
-  const showMessage = (text: string, type: "success" | "error") => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage(null), 3000);
-  };
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
