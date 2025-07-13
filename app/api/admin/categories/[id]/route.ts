@@ -31,37 +31,46 @@ async function processImage(file: File): Promise<string> {
 // GET /api/admin/categories/[id]
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     await dbConnect();
-    const { id } = await params;
+    const { id } = params;
 
     const category = await Category.findById(id).lean<ICategory>();
     if (!category) {
-      return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Category not found" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ success: true, data: category });
   } catch (error) {
     console.error("GET Error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
 // PUT /api/admin/categories/[id]
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     await dbConnect();
-    const { id } = await params;
+    const { id } = params;
     const formData = await req.formData();
 
     const nameEntry = formData.get("name");
     if (typeof nameEntry !== "string" || !nameEntry.trim()) {
-      return NextResponse.json({ success: false, error: "Category name is required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Category name is required" },
+        { status: 400 }
+      );
     }
 
     const name = nameEntry.trim();
@@ -74,11 +83,14 @@ export async function PUT(
     }).lean<ICategory>();
 
     if (existingCategory) {
-      return NextResponse.json({
-        success: false,
-        error: "A category with this name already exists",
-        existingId: existingCategory._id,
-      }, { status: 409 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "A category with this name already exists",
+          existingId: existingCategory._id,
+        },
+        { status: 409 }
+      );
     }
 
     let imagePath: string | undefined;
@@ -97,7 +109,10 @@ export async function PUT(
         }
       } catch (error) {
         console.error("Image upload failed:", error);
-        return NextResponse.json({ success: false, error: "Failed to upload image" }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: "Failed to upload image" },
+          { status: 400 }
+        );
       }
     }
 
@@ -119,28 +134,37 @@ export async function PUT(
     }).lean<ICategory>();
 
     if (!updatedCategory) {
-      return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Category not found" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ success: true, data: updatedCategory });
   } catch (error) {
     console.error("PUT Error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
 // DELETE /api/admin/categories/[id]
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     await dbConnect();
-    const { id } = await params;
+    const { id } = params;
 
     const deletedCategory = await Category.findByIdAndDelete(id).lean<ICategory>();
     if (!deletedCategory) {
-      return NextResponse.json({ success: false, error: "Category not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "Category not found" },
+        { status: 404 }
+      );
     }
 
     if (deletedCategory.image) {
@@ -158,6 +182,9 @@ export async function DELETE(
     });
   } catch (error) {
     console.error("DELETE Error:", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
