@@ -29,8 +29,10 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "react-hot-toast";
 import ClientLayoutWrapper from "./ClientLayoutWrapper";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: "AutoDrive",
   description: "Professional SaaS Store",
 };

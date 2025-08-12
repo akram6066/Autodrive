@@ -1,11 +1,18 @@
+// models/Cart.ts
+
 import { Schema, Document, models, model } from "mongoose";
+
+interface Variant {
+  brand: string;
+  size: string;
+}
 
 export interface ICartItem extends Document {
   userId: string;
   productId: string;
   productName: string;
   image: string;
-  variant: string;
+  variant: Variant;
   price: number;
   discountPrice: number;
   quantity: number;
@@ -18,7 +25,10 @@ const CartSchema = new Schema<ICartItem>(
     productId: { type: String, required: true },
     productName: { type: String, required: true },
     image: { type: String, required: true },
-    variant: { type: String, required: true },
+    variant: {
+      brand: { type: String, required: true },
+      size: { type: String, required: true },
+    },
     price: { type: Number, required: true },
     discountPrice: { type: Number, required: true },
     quantity: { type: Number, required: true },

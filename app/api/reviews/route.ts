@@ -1,33 +1,73 @@
+// app/api/reviews/route.ts
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
-import Review from "@/models/Review";
-import Product from "@/models/Product";
+import ReviewModel from "@/models/Review";
+import ProductModel from "@/models/Product";
+import mongoose from "mongoose";
+
+interface ReviewBody {
+  productId: string;
+  rating: number;
+  comment: string;
+}
 
 export async function POST(req: Request) {
-  await dbConnect();
   try {
-    const { productId, userId, rating, comment } = await req.json();
+    await dbConnect();
 
-    if (!productId || !userId || !rating) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await Review.create({
-      product: productId,
-      user: userId,
-      rating,
-      comment,
+    const body: ReviewBody = await req.json();
+
+    // Validate input
+    if (
+      !body.productId ||
+      !mongoose.Types.ObjectId.isValid(body.productId) ||
+      !body.rating ||
+      body.rating < 1 ||
+      body.rating > 5 ||
+      !body.comment?.trim()
+    ) {
+      return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+    }
+
+    // Upsert review
+    const review = await ReviewModel.findOneAndUpdate(
+      { user: session.user.id, product: body.productId },
+      {
+        user: session.user.id,
+        product: body.productId,
+        rating: body.rating,
+        comment: body.comment.trim(),
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
+
+    if (!review) {
+      return NextResponse.json({ error: "Failed to save review" }, { status: 500 });
+    }
+
+    // Recalculate average rating
+    const agg = await ReviewModel.aggregate([
+      { $match: { product: new mongoose.Types.ObjectId(body.productId) } },
+      { $group: { _id: "$product", avgRating: { $avg: "$rating" } } },
+    ]);
+
+    const avgRating = agg[0]?.avgRating || 0;
+
+    // Update product
+    await ProductModel.findByIdAndUpdate(body.productId, {
+      rating: avgRating,
     });
 
-    // After review created, update product average rating
-    const reviews = await Review.find({ product: productId });
-    const average = reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length;
-
-    await Product.findByIdAndUpdate(productId, { averageRating: average });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ success: true, avgRating });
+  } catch (err) {
+    console.error("POST /api/reviews error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

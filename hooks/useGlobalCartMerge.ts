@@ -1,7 +1,9 @@
 "use client";
+
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { handleCartMerge } from "@/lib/cart/mergeOnLogin";
+import { storeAuthUser } from "@/lib/auth/storeUser";
 
 export function useGlobalCartMerge() {
   const { data: session, status } = useSession();
@@ -15,7 +17,8 @@ export function useGlobalCartMerge() {
     if (!mounted) return;
 
     if (status === "authenticated" && session?.user?.id) {
-      handleCartMerge();
+      storeAuthUser(session); // ✅ Save user ID to localStorage
+      handleCartMerge();      // ✅ Merge guest cart to server
     }
   }, [mounted, status, session]);
 }

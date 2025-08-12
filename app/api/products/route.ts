@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose, { FilterQuery } from "mongoose";
 import dbConnect from "@/lib/dbConnect";
 import Product from "@/models/Product";
-import mongoose, { FilterQuery } from "mongoose";
 
 interface BrandSize {
   size: string;
@@ -19,8 +19,18 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query: FilterQuery<typeof Product> = {};
 
-  // ✅ Search
-  const search = searchParams.get("search");
+  // Extract search filters
+  const search = searchParams.get("search")?.trim();
+  const categoryParam = searchParams.get("category");
+  const brandParam = searchParams.get("brand");
+  const sizeParam = searchParams.get("size");
+  const minPrice = parseFloat(searchParams.get("minPrice") || "0");
+  const maxPrice = parseFloat(searchParams.get("maxPrice") || "0");
+  const page = parseInt(searchParams.get("page") || "1");
+  const limit = parseInt(searchParams.get("limit") || "12");
+  const skip = (page - 1) * limit;
+
+  // 🔍 Search
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: "i" } },
@@ -30,30 +40,29 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  // ✅ Category (multi)
-  const categoryParam = searchParams.get("category");
+  // 🏷️ Category filter
   if (categoryParam) {
-    const categoryIds = categoryParam.split(",").filter(mongoose.Types.ObjectId.isValid);
-    if (categoryIds.length > 0) query.category = { $in: categoryIds };
+    const categoryIds = categoryParam
+      .split(",")
+      .filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (categoryIds.length > 0) {
+      query.category = { $in: categoryIds };
+    }
   }
 
-  // ✅ Brand
-  const brandParam = searchParams.get("brand");
+  // 🏷️ Brand filter
   if (brandParam) {
     const brands = brandParam.split(",").map((b) => b.trim());
     query["brands.brandName"] = { $in: brands };
   }
 
-  // ✅ Size
-  const sizeParam = searchParams.get("size");
+  // 🏷️ Size filter
   if (sizeParam) {
     const sizes = sizeParam.split(",").map((s) => s.trim());
     query["brands.sizes.size"] = { $in: sizes };
   }
 
-  // ✅ Price range
-  const minPrice = parseFloat(searchParams.get("minPrice") || "0");
-  const maxPrice = parseFloat(searchParams.get("maxPrice") || "0");
+  // 💰 Price range filter
   if (minPrice > 0 || maxPrice > 0) {
     query.$or = [
       { discountPrice: { $gte: minPrice, $lte: maxPrice } },
@@ -61,43 +70,41 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  // ✅ Pagination
-  const page = parseInt(searchParams.get("page") || "1");
-  const limit = parseInt(searchParams.get("limit") || "12");
-  const skip = (page - 1) * limit;
+  // 📦 Fetch total & filtered products
+  const [total, products] = await Promise.all([
+    Product.countDocuments(query),
+    Product.find(query)
+      .populate("category")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+  ]);
 
-  // ✅ Query products
-  const total = await Product.countDocuments(query);
-  const products = await Product.find(query)
-    .populate("category")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
-
-  // ✅ Strict Type Mapping
-  const formatted = products.map((p) => {
-    const brandList: Brand[] = p.brands.map((b: Brand) => ({
+  // 🎯 Format products with strict typing
+  const formatted = products.map((p) => ({
+    id: p._id.toString(),
+    slug: p.slug,
+    name: p.name,
+    description: p.description,
+    quantity: p.quantity,
+    discountPrice: p.discountPrice,
+    isOffer: p.isOffer,
+    image: p.image,
+    category: p.category
+      ? {
+          id: p.category._id.toString(),
+          name: p.category.name,
+          slug: p.category.slug,
+        }
+      : null,
+    brands: p.brands.map((b: Brand) => ({
       brandName: b.brandName,
-      sizes: b.sizes.map((s: BrandSize) => ({ size: s.size, price: s.price })),
-    }));
-
-    return {
-      id: p._id.toString(),
-      slug: p.slug,
-      name: p.name,
-      description: p.description,
-      quantity: p.quantity,
-      discountPrice: p.discountPrice,
-      isOffer: p.isOffer,
-      image: p.image,
-      category: {
-        id: p.category?._id.toString(),
-        name: p.category?.name,
-        slug: p.category?.slug,
-      },
-      brands: brandList,
-    };
-  });
+      sizes: b.sizes.map((s: BrandSize) => ({
+        size: s.size,
+        price: s.price,
+      })),
+    })),
+  }));
 
   return NextResponse.json({ total, products: formatted });
 }

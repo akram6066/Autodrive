@@ -1,18 +1,18 @@
-// CartItemComponent.tsx
 "use client";
 
+import React from "react";
 import Image from "next/image";
 import { Trash } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/store/cartStore";
 import { formatPrice } from "@/utils/price";
-import type { CartItem } from "@/types/CartItem"; // ✅ use `type`
+import type { CartItem } from "@/types/CartItem";
 
 interface Props {
   item: CartItem;
 }
 
-export default function CartItemComponent({ item }: Props) {
+const CartItemComponent = ({ item }: Props) => {
   const { updateQuantity, removeItem } = useCartStore();
 
   const handleRemove = () => {
@@ -20,16 +20,26 @@ export default function CartItemComponent({ item }: Props) {
     toast.success("Removed from cart");
   };
 
-  const total = (item.discountPrice ?? item.price) * item.quantity;
+  const total =
+    (item.discountPrice > 0 ? item.discountPrice : item.price) *
+    item.quantity;
 
   return (
     <div className="flex flex-col sm:flex-row gap-4 items-center border-b pb-4">
-      <Image src={item.image} alt={item.name} width={100} height={100} className="rounded-lg object-cover" />
+      <Image
+        src={item.image || "/placeholder.png"}
+        alt={item.name}
+        width={100}
+        height={100}
+        className="rounded-lg object-cover"
+      />
       <div className="flex-1 w-full">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-semibold text-lg">{item.name}</p>
-            <p className="text-sm text-gray-500">Size: {item.variant}</p>
+            <p className="text-sm text-gray-500">
+              Brand: {item.variant?.brand || "N/A"} | Size: {item.variant?.size || "N/A"}
+            </p>
           </div>
           <div className="text-lg font-bold mt-2 sm:mt-0">
             {formatPrice(total)}
@@ -39,15 +49,27 @@ export default function CartItemComponent({ item }: Props) {
         <div className="flex items-center gap-3 mt-3">
           <button
             aria-label="Decrease quantity"
-            onClick={() => updateQuantity(item.productId, item.variant, Math.max(1, item.quantity - 1))}
+            onClick={() =>
+              updateQuantity(
+                item.productId,
+                item.variant,
+                Math.max(1, item.quantity - 1)
+              )
+            }
             className="bg-gray-200 dark:bg-gray-700 w-8 h-8 rounded text-lg font-bold"
-          >-</button>
+          >
+            -
+          </button>
           <span className="font-semibold">{item.quantity}</span>
           <button
             aria-label="Increase quantity"
-            onClick={() => updateQuantity(item.productId, item.variant, item.quantity + 1)}
+            onClick={() =>
+              updateQuantity(item.productId, item.variant, item.quantity + 1)
+            }
             className="bg-gray-200 dark:bg-gray-700 w-8 h-8 rounded text-lg font-bold"
-          >+</button>
+          >
+            +
+          </button>
           <button
             aria-label="Remove item"
             onClick={handleRemove}
@@ -59,4 +81,6 @@ export default function CartItemComponent({ item }: Props) {
       </div>
     </div>
   );
-}
+};
+
+export default React.memo(CartItemComponent);

@@ -1,5 +1,4 @@
-// ✅ /models/Order.ts (Updated Model)
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 interface OrderItem {
   name: string;
@@ -8,9 +7,13 @@ interface OrderItem {
   price: number;
   discountApplied: boolean;
   subtotal: number;
+  image?: string; // Added image field
 }
 
 export interface IOrder extends Document {
+  user: Types.ObjectId;
+  userEmail?: string;
+  userName?: string;
   items: OrderItem[];
   subtotal: number;
   total: number;
@@ -22,17 +25,21 @@ export interface IOrder extends Document {
   updatedAt: Date;
 }
 
-const OrderItemSchema: Schema = new Schema({
+const OrderItemSchema = new Schema<OrderItem>({
   name: String,
   variant: String,
   quantity: Number,
   price: Number,
   discountApplied: Boolean,
   subtotal: Number,
+  image: { type: String, required: false }, // Optional image field
 });
 
-const OrderSchema: Schema = new Schema(
+const OrderSchema = new Schema<IOrder>(
   {
+    user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    userEmail: { type: String },
+    userName: { type: String },
     items: [OrderItemSchema],
     subtotal: { type: Number, required: true },
     total: { type: Number, required: true },
@@ -48,4 +55,5 @@ const OrderSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-export default mongoose.models.Order || mongoose.model<IOrder>("Order", OrderSchema);
+export default mongoose.models.Order ||
+  mongoose.model<IOrder>("Order", OrderSchema);

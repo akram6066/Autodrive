@@ -2,14 +2,22 @@ import Link from "next/link";
 import { absoluteFetch } from "@/lib/absoluteFetch";
 import ProductCard, { Product } from "@/components/products/ProductCard";
 
-// Server Component (pure async server component)
 export default async function FeaturedProducts() {
-  // ✅ Fully type-safe fetch — you get Product[] directly
-  const allProducts = await absoluteFetch<Product[]>("/api/admin/products", {
-    next: { revalidate: 60 }, // ✅ ISR: cache for 60 seconds
-  });
+  // Properly typed fetch
+  const { products }: { products: (Omit<Product, "_id"> & { id: string })[] } = await absoluteFetch(
+    "/api/products",
+    {
+      next: { revalidate: 60 },
+    }
+  );
 
-  const featured = allProducts.slice(0, 6); // ✅ Take first 6 products only
+  // Convert id → _id for compatibility with ProductCard
+  const mapped: Product[] = products.map((p) => ({
+    ...p,
+    _id: p.id, // 👈 Fix: map id to _id
+  }));
+
+  const featured = mapped.slice(0, 6);
 
   return (
     <section className="max-w-7xl mx-auto px-4 py-20">

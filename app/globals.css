@@ -131,3 +131,28 @@
   @apply bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90 text-white py-2 px-5 rounded-lg font-semibold transition shadow-md;
 }
 
+@layer utilities {
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(1 0 0 / 0.08),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}

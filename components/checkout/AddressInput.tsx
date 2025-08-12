@@ -1,26 +1,39 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
 
-const API_KEY = process.env.NEXT_PUBLIC_OPENCAGE_API_KEY!;
+import { useEffect, useState, useRef } from "react";
 
 interface AddressInputProps {
   value: string;
-  onChange: (address: string) => void;
+  onChange: (address: string, lat?: number, lon?: number, type?: string) => void;
   id?: string;
   className?: string;
   placeholder?: string;
 }
 
+interface PhotonFeature {
+  geometry: {
+    coordinates: [number, number];
+  };
+  properties: {
+    name: string;
+    city?: string;
+    country?: string;
+    state?: string;
+    street?: string;
+    postcode?: string;
+    housenumber?: string;
+  };
+}
+
+interface PhotonResponse {
+  features: PhotonFeature[];
+}
+
 interface Suggestion {
-  formatted: string;
-}
-
-interface OpenCageResult {
-  formatted: string;
-}
-
-interface OpenCageResponse {
-  results: OpenCageResult[];
+  label: string;
+  lat: number;
+  lon: number;
+  type: string;
 }
 
 export default function AddressInput({
@@ -39,10 +52,22 @@ export default function AddressInput({
   useEffect(() => {
     const saved = localStorage.getItem("deliveryAddress");
     if (saved) {
-      onChange(saved);
       setInput(saved);
+      onChange(saved);
     }
   }, [onChange]);
+
+  const getType = (text: string): string => {
+    text = text.toLowerCase();
+    if (/apartment|apt|flat|residence/.test(text)) return "Apartment";
+    if (/school|university|academy/.test(text)) return "School";
+    if (/church|mosque|temple/.test(text)) return "Religious";
+    if (/shop|mall|supermarket|store/.test(text)) return "Shop";
+    if (/hospital|clinic/.test(text)) return "Hospital";
+    if (/hotel|inn|lodge/.test(text)) return "Hotel";
+    if (/office|plaza|business|building/.test(text)) return "Business";
+    return "Location";
+  };
 
   const fetchSuggestions = async (query: string) => {
     if (query.length < 3) {
@@ -55,20 +80,40 @@ export default function AddressInput({
 
     try {
       const response = await fetch(
-        `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(
-          query
-        )}&key=${API_KEY}&limit=5`
+        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lang=en`
       );
-
       if (!response.ok) throw new Error("Failed to fetch suggestions.");
 
-      const data: OpenCageResponse = await response.json();
+      const data: PhotonResponse = await response.json();
 
-      const results: Suggestion[] = data.results.map((item) => ({
-        formatted: item.formatted,
-      }));
+      const formatFeature = (f: PhotonFeature): Suggestion => {
+        const p = f.properties;
+        const parts = [
+          p.housenumber,
+          p.name,
+          p.street,
+          p.city,
+          p.state,
+          p.postcode,
+          p.country,
+        ].filter(Boolean);
 
-      setSuggestions(results);
+        const label = parts.join(", ");
+        return {
+          label,
+          lat: f.geometry.coordinates[1],
+          lon: f.geometry.coordinates[0],
+          type: getType(label),
+        };
+      };
+
+      const kenyan = data.features
+        .filter((f) => f.properties.country?.toLowerCase() === "kenya")
+        .map(formatFeature);
+
+      const global = data.features.map(formatFeature);
+
+      setSuggestions(kenyan.length ? kenyan : global);
     } catch (err) {
       console.error("Error fetching suggestions:", err);
       setError("Could not load suggestions. Please try again.");
@@ -86,11 +131,11 @@ export default function AddressInput({
     debounceRef.current = setTimeout(() => fetchSuggestions(val), 500);
   };
 
-  const handleSelect = (address: string) => {
-    setInput(address);
+  const handleSelect = (suggestion: Suggestion) => {
+    setInput(suggestion.label);
     setSuggestions([]);
-    onChange(address);
-    localStorage.setItem("deliveryAddress", address);
+    onChange(suggestion.label, suggestion.lat, suggestion.lon, suggestion.type);
+    localStorage.setItem("deliveryAddress", suggestion.label);
   };
 
   return (
@@ -121,10 +166,11 @@ export default function AddressInput({
           {suggestions.map((s, i) => (
             <li
               key={i}
-              onClick={() => handleSelect(s.formatted)}
-              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+              onClick={() => handleSelect(s)}
+              className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex flex-col"
             >
-              {s.formatted}
+              <span>{s.label}</span>
+              <span className="text-xs text-gray-500 mt-1">{s.type}</span>
             </li>
           ))}
         </ul>
