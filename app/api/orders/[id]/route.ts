@@ -5,32 +5,31 @@ import dbConnect from "@/lib/dbConnect";
 import Order, { IOrder } from "@/models/Order";
 import { Types } from "mongoose";
 
-// Define params type for better TypeScript safety
+// ✅ Updated type for Next.js 15 - params is now a Promise
 interface RouteContext {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function GET(req: Request, context: RouteContext) {
+export async function GET(_req: Request, context: RouteContext) {
   try {
-    // Connect to database
+    // 1️⃣ Connect to database
     await dbConnect();
-
-    // Get session
+    
+    // 2️⃣ Authenticate user
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // Await params to handle Next.js dynamic route correctly
-    const params = 'params' in context ? await context.params : context;
-    const { id } = params;
-
-    // Validate order ID
+    // 3️⃣ Await params in Next.js 15
+    const { id } = await context.params;
+    
+    // 4️⃣ Validate order ID format
     if (!id || !Types.ObjectId.isValid(id)) {
       return NextResponse.json({ message: "Invalid order ID" }, { status: 400 });
     }
 
-    // Fetch order with lean for performance
+    // 5️⃣ Fetch order with lean query for performance
     const order = await Order.findById(id)
       .populate("user", "name email")
       .lean<IOrder>();
@@ -39,19 +38,18 @@ export async function GET(req: Request, context: RouteContext) {
       return NextResponse.json({ message: "Order not found" }, { status: 404 });
     }
 
-    // Check authorization
+    // 6️⃣ Authorization: admin or owner can view
     const isAdmin = session.user.role === "admin";
     const isOwner = order.userEmail === session.user.email;
+    
     if (!isAdmin && !isOwner) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
+    // 7️⃣ Success
     return NextResponse.json(order, { status: 200 });
   } catch (err) {
     console.error("Error fetching order:", err);
     return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
-
-// Explicitly export only GET to prevent 405 errors
-// export { GET }; // Removed to prevent redeclaration error
