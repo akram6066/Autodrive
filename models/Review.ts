@@ -19,13 +19,20 @@ const ReviewSchema = new Schema<IReview>(
   { timestamps: true }
 );
 
-// Prevent duplicate reviews per user per product
+/**
+ * 🔹 Indexing Strategy for High Performance
+ * - Unique index on (user, product) → prevents duplicate reviews by the same user.
+ * - Index on product → speeds up product review lookups & aggregations.
+ * - Index on rating → optional, useful for sorting/filtering by rating.
+ */
 ReviewSchema.index({ user: 1, product: 1 }, { unique: true });
+ReviewSchema.index({ product: 1 });
+ReviewSchema.index({ rating: 1 });
 
 const ReviewModel: Model<IReview> =
   mongoose.models.Review || mongoose.model<IReview>("Review", ReviewSchema);
 
 export default ReviewModel;
 
-// ✅ Export interface for typing
+// ✅ Export interface for type safety
 export type { IReview as ReviewDocument };

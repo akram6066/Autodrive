@@ -20,16 +20,16 @@ interface Brand {
 }
 
 interface Category {
-  _id: string;
+  id: string;
   name: string;
   slug: string;
 }
 
 export interface Product {
-  _id: string;
+  id: string; // ✅ API now returns id instead of _id
   slug: string;
   name: string;
-  category: Category;
+  category: Category | null;
   description: string;
   quantity: number;
   brands: Brand[];
@@ -42,45 +42,50 @@ interface Props {
   product: Product;
 }
 
-// Fetcher for SWR
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-const RatingStars: React.FC<{
-  productId: string;
-  averageRating: number;
-  onRate: (rating: number) => void;
-}> = React.memo(({ productId, averageRating, onRate }) => {
-  const [hovered, setHovered] = React.useState<number | null>(null);
+const RatingStars = React.memo(
+  ({
+    productId,
+    averageRating,
+    onRate,
+  }: {
+    productId: string;
+    averageRating: number;
+    onRate: (rating: number) => void;
+  }) => {
+    const [hovered, setHovered] = React.useState<number | null>(null);
 
-  return (
-    <div className="flex items-center gap-1">
-      {Array.from({ length: 5 }, (_, i) => {
-        const starIndex = i + 1;
-        const active = starIndex <= (hovered ?? averageRating);
-        return (
-          <Star
-            key={`${productId}-star-${i}`}
-            size={16}
-            className={active ? "text-yellow-400 cursor-pointer" : "text-gray-300 cursor-pointer"}
-            fill={active ? "yellow" : "none"}
-            onMouseEnter={(e) => {
-              e.stopPropagation();
-              setHovered(starIndex);
-            }}
-            onMouseLeave={(e) => {
-              e.stopPropagation();
-              setHovered(null);
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRate(starIndex);
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-});
+    return (
+      <div className="flex items-center gap-1">
+        {Array.from({ length: 5 }, (_, i) => {
+          const starIndex = i + 1;
+          const active = starIndex <= (hovered ?? averageRating);
+          return (
+            <Star
+              key={`${productId}-star-${i}`}
+              size={16}
+              className={active ? "text-yellow-400 cursor-pointer" : "text-gray-300 cursor-pointer"}
+              fill={active ? "yellow" : "none"}
+              onMouseEnter={(e) => {
+                e.stopPropagation();
+                setHovered(starIndex);
+              }}
+              onMouseLeave={(e) => {
+                e.stopPropagation();
+                setHovered(null);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRate(starIndex);
+              }}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+);
 RatingStars.displayName = "RatingStars";
 
 export default function ProductCard({ product }: Props) {
@@ -95,9 +100,8 @@ export default function ProductCard({ product }: Props) {
   const discountPercent =
     originalPrice > 0 ? Math.round(((originalPrice - discount) / originalPrice) * 100) : 0;
 
-  // Cached rating fetch
   const { data: stats, mutate } = useSWR<{ averageRating: number }>(
-    `/api/reviews/product/${product._id}/stats`,
+    `/api/reviews/product/${product.id}/stats`, // ✅ uses new id
     fetcher
   );
   const averageRating = stats?.averageRating || 0;
@@ -111,7 +115,7 @@ export default function ProductCard({ product }: Props) {
       }
 
       const item: CartItem = {
-        productId: String(product._id),
+        productId: product.id,
         name: product.name,
         price: Number(size.price),
         discountPrice: Number(product.discountPrice ?? size.price),
@@ -136,14 +140,14 @@ export default function ProductCard({ product }: Props) {
   const handleRate = useCallback(
     async (rating: number) => {
       try {
-        const res = await fetch(`/api/reviews/product/${product._id}`, {
+        const res = await fetch(`/api/reviews/product/${product.id}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rating, comment: "" }),
         });
         if (!res.ok) throw new Error();
         toast.success(`You rated ${product.name} ${rating} stars`);
-        mutate(); // revalidate SWR
+        mutate();
       } catch {
         toast.error("Failed to submit rating");
       }
@@ -199,13 +203,7 @@ export default function ProductCard({ product }: Props) {
           )}
         </h3>
         <p className="text-xs text-gray-500">{product.category?.name}</p>
-
-        {/* Ratings */}
-        <RatingStars
-          productId={product._id}
-          averageRating={averageRating}
-          onRate={handleRate}
-        />
+        <RatingStars productId={product.id} averageRating={averageRating} onRate={handleRate} />
       </div>
 
       {/* Price & Cart */}

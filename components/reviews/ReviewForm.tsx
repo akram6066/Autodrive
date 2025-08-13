@@ -1,23 +1,38 @@
-// components/ReviewForm.tsx
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
+import { toast } from "sonner";
+import StarRating from "./StarRating";
 
-type ReviewFormProps = {
+type Stats = { averageRating: number; totalReviews: number };
+
+interface ReviewFormProps {
   productId: string;
-  onSuccess?: () => void; // optional callback so page can refresh reviews
-};
+  onReviewSubmitted?: () => void;
+  onStatsUpdate?: (stats: Stats) => void; // ✅ added this prop
+}
 
-type ApiError = { error?: string };
+export default function ReviewForm({
+  productId,
+  onReviewSubmitted,
+  onStatsUpdate,
+}: ReviewFormProps) {
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [loading, setLoading] = useState(false);
 
-export default function ReviewForm({ productId, onSuccess }: ReviewFormProps) {
-  const [rating, setRating] = useState<number>(5);
-  const [comment, setComment] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  async function submitReview() {
-    setError(null);
+    if (rating === 0) {
+      toast.error("Please select a rating");
+      return;
+    }
+    if (!comment.trim()) {
+      toast.error("Please write a review");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/reviews", {
@@ -26,54 +41,63 @@ export default function ReviewForm({ productId, onSuccess }: ReviewFormProps) {
         body: JSON.stringify({ productId, rating, comment }),
       });
 
-      if (!res.ok) {
-        const data = (await res.json()) as ApiError;
-        setError(data.error ?? "Failed to submit");
-      } else {
-        setComment("");
-        setRating(5);
-        onSuccess?.();
+      if (!res.ok) throw new Error("Failed to submit review");
+
+      toast.success("Review submitted successfully!");
+      setRating(0);
+      setComment("");
+      onReviewSubmitted?.();
+
+      // ✅ Refetch stats after submission
+      if (onStatsUpdate) {
+        const statsRes = await fetch(`/api/reviews/product/${productId}/stats`);
+        if (statsRes.ok) {
+          const data = await statsRes.json();
+          onStatsUpdate({
+            averageRating: Number(data.averageRating ?? 0),
+            totalReviews: Number(data.totalReviews ?? 0),
+          });
+        }
       }
-    } catch  {
-      setError("Network error");
+    } catch (err) {
+      toast.error((err as Error).message || "Something went wrong");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="space-y-2">
-      {error ? <div className="text-red-600">{error}</div> : null}
-      <label className="block">
-        Rating
-        <select
-          value={rating}
-          onChange={(e) => setRating(Number(e.target.value))}
-          className="ml-2"
-        >
-          {[5, 4, 3, 2, 1].map((r) => (
-            <option key={r} value={r}>
-              {r} Star{r > 1 ? "s" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 bg-white p-4 rounded-lg shadow-sm"
+      aria-label="Submit a review"
+    >
+      <div>
+        <label className="block mb-1 font-medium">Your Rating</label>
+        <StarRating rating={rating} onChange={setRating} size={28} />
+      </div>
 
-      <textarea
-        className="w-full p-2 border rounded"
-        placeholder="Write your review..."
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        rows={4}
-      />
+      <div>
+        <label htmlFor="comment" className="block mb-1 font-medium">
+          Your Review
+        </label>
+        <textarea
+          id="comment"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={4}
+          placeholder="Share your experience..."
+          className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+        />
+      </div>
 
       <button
-        onClick={submitReview}
-        disabled={loading || comment.trim().length === 0}
-        className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+        type="submit"
+        disabled={loading}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
       >
         {loading ? "Submitting..." : "Submit Review"}
       </button>
-    </div>
+    </form>
   );
 }

@@ -1,54 +1,85 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ProductsFilters from "@/components/products/ProductsFilters";
 import ProductCard from "@/components/products/ProductCard";
-import ProductsPagination from "@/components/products/ProductsPagination"; // ✅ Improved version
+import ProductsPagination from "@/components/products/ProductsPagination";
 import SkeletonProductGrid from "@/components/SkeletonProductGrid";
 import { Product } from "@/types/product";
 
 interface ProductsResponse {
-  total: number; // total from DB
+  total: number;
   products: Product[];
+}
+
+interface RatingsMap {
+  [productId: string]: number;
 }
 
 export default function ProductsClientPage() {
   const searchParams = useSearchParams();
   const [data, setData] = useState<ProductsResponse | null>(null);
+  const [ratings, setRatings] = useState<RatingsMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const searchString = searchParams.toString(); // ✅ avoids re-renders from object identity
+  // Memoize query string so it doesn't trigger extra renders
+  const searchString = useMemo(() => searchParams.toString(), [searchParams]);
+  const page = Number(searchParams.get("page") ?? 1);
 
   useEffect(() => {
-    const fetchProducts = async () => {
+    const controller = new AbortController();
+
+    const fetchProductsAndRatings = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const res = await fetch(`/api/products?${searchString}`);
+        // 1️⃣ Fetch products first
+        const res = await fetch(`/api/products?${searchString}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) throw new Error("Failed to fetch products");
 
         const json: ProductsResponse = await res.json();
 
-        // ✅ Keep API total for pagination (do NOT overwrite with filtered length)
+        // Filter out products without valid brand/size
         const validProducts = json.products.filter(
           (p) => p.brands?.length > 0 && p.brands.every((b) => b.sizes?.length > 0)
         );
 
         setData({ total: json.total, products: validProducts });
+
+        // 2️⃣ Bulk fetch ratings for only the visible products
+        if (validProducts.length > 0) {
+          const ids = validProducts.map((p) => p._id).join(",");
+          const ratingsRes = await fetch(`/api/reviews/stats?ids=${ids}`, {
+            signal: controller.signal,
+          });
+          if (ratingsRes.ok) {
+            const ratingsData: RatingsMap = await ratingsRes.json();
+            setRatings(ratingsData);
+          } else {
+            setRatings({});
+          }
+        } else {
+          setRatings({});
+        }
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProducts();
-  }, [searchString]);
+    fetchProductsAndRatings();
 
-  const page = Number(searchParams.get("page") ?? 1);
+    return () => {
+      controller.abort(); // Cancel if search changes quickly
+    };
+  }, [searchString]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-16">
@@ -75,7 +106,11 @@ export default function ProductsClientPage() {
               {/* Product Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                 {data?.products.map((product) => (
-                  <ProductCard key={`${product._id}-${product.slug}`} product={product} />
+                  <ProductCard
+                    key={`${product._id}-${product.slug}`}
+                    product={product}
+                    averageRating={ratings[product._id] || 0}
+                  />
                 ))}
               </div>
 
