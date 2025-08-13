@@ -1,128 +1,140 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import ProductsFilters from "@/components/products/ProductsFilters";
 import ProductCard from "@/components/products/ProductCard";
 import ProductsPagination from "@/components/products/ProductsPagination";
 import SkeletonProductGrid from "@/components/SkeletonProductGrid";
-import { Product } from "@/types/product";
+
+interface BrandSize {
+  size: string;
+  price: number;
+}
+
+interface Brand {
+  brandName: string;
+  sizes: BrandSize[];
+}
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  category: Category | null;
+  description: string;
+  quantity: number;
+  brands: Brand[];
+  image?: string;
+  discountPrice?: number;
+  isOffer?: boolean;
+}
 
 interface ProductsResponse {
   total: number;
-  products: Product[];
-}
-
-interface RatingsMap {
-  [productId: string]: number;
+  products: Array<Product & { _id?: string }>;
 }
 
 export default function ProductsClientPage() {
   const searchParams = useSearchParams();
   const [data, setData] = useState<ProductsResponse | null>(null);
-  const [ratings, setRatings] = useState<RatingsMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Memoize query string so it doesn't trigger extra renders
+  // Memoize query string and page to avoid unnecessary re-renders
   const searchString = useMemo(() => searchParams.toString(), [searchParams]);
-  const page = Number(searchParams.get("page") ?? 1);
+  const page = useMemo(() => Number(searchParams.get("page") ?? 1), [searchParams]);
+
+  // Fetch products with abortable fetch
+  const fetchProducts = useCallback(async (signal: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/products?${searchString}`, { signal });
+      if (!res.ok) throw new Error("Failed to fetch products");
+
+      const json: ProductsResponse = await res.json();
+
+      // Map _id to id and ensure valid brands/sizes
+      const validProducts = json.products
+        .filter((p) => p.brands?.length > 0 && p.brands.every((b) => b.sizes?.length > 0))
+        .map((p) => ({
+          ...p,
+          id: p._id || p.id || "", // Map _id to id, fallback to empty string
+          category: p.category && "id" in p.category && "name" in p.category && "slug" in p.category
+            ? p.category // Ensure category is a valid Category object
+            : null, // Fallback to null if category is not populated or invalid
+        }));
+
+      setData({ total: json.total, products: validProducts });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+    } finally {
+      setLoading(false);
+    }
+  }, [searchString]);
 
   useEffect(() => {
     const controller = new AbortController();
-
-    const fetchProductsAndRatings = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // 1️⃣ Fetch products first
-        const res = await fetch(`/api/products?${searchString}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error("Failed to fetch products");
-
-        const json: ProductsResponse = await res.json();
-
-        // Filter out products without valid brand/size
-        const validProducts = json.products.filter(
-          (p) => p.brands?.length > 0 && p.brands.every((b) => b.sizes?.length > 0)
-        );
-
-        setData({ total: json.total, products: validProducts });
-
-        // 2️⃣ Bulk fetch ratings for only the visible products
-        if (validProducts.length > 0) {
-          const ids = validProducts.map((p) => p._id).join(",");
-          const ratingsRes = await fetch(`/api/reviews/stats?ids=${ids}`, {
-            signal: controller.signal,
-          });
-          if (ratingsRes.ok) {
-            const ratingsData: RatingsMap = await ratingsRes.json();
-            setRatings(ratingsData);
-          } else {
-            setRatings({});
-          }
-        } else {
-          setRatings({});
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Something went wrong");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProductsAndRatings();
-
-    return () => {
-      controller.abort(); // Cancel if search changes quickly
-    };
-  }, [searchString]);
+    fetchProducts(controller.signal);
+    return () => controller.abort();
+  }, [fetchProducts]);
 
   return (
-    <main className="max-w-7xl mx-auto px-4 py-16">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       <h1 className="text-4xl font-extrabold text-center text-primary mb-14">
         Explore Our Products
       </h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8 lg:gap-10">
         {/* Filters */}
-        <div>
+        <aside className="md:sticky md:top-24">
           <ProductsFilters />
-        </div>
+        </aside>
 
         {/* Product List + Pagination */}
-        <div className="md:col-span-3">
+        <section className="md:col-span-3 space-y-8">
           {loading ? (
             <SkeletonProductGrid count={12} />
           ) : error ? (
-            <div className="text-center text-red-500 py-24">❌ {error}</div>
+            <div className="text-center text-red-500 py-24 bg-white rounded-2xl shadow-lg">
+              ❌ {error}
+            </div>
           ) : data && data.products.length === 0 ? (
-            <div className="text-center text-lg text-red-500 py-24">🚫 No products found!</div>
+            <div className="text-center text-lg text-red-500 py-24 bg-white rounded-2xl shadow-lg">
+              🚫 No products found!
+            </div>
           ) : (
             <>
               {/* Product Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
                 {data?.products.map((product) => (
                   <ProductCard
-                    key={`${product._id}-${product.slug}`}
+                    key={`${product.id}-${product.slug}`}
                     product={product}
-                    averageRating={ratings[product._id] || 0}
                   />
                 ))}
               </div>
 
               {/* Pagination */}
               {data && data.total > 12 && (
-                <div className="mt-12">
-                  <ProductsPagination total={data.total} currentPage={page} pageSize={12} />
-                </div>
+                <ProductsPagination
+                  total={data.total}
+                  currentPage={page}
+                  pageSize={12}
+                />
               )}
             </>
           )}
-        </div>
+        </section>
       </div>
     </main>
   );

@@ -6,10 +6,10 @@ import axios from "axios";
 import ProductsGrid from "./ProductsGrid";
 
 interface Product {
-  _id: string;
+  id: string;
   slug: string;
   name: string;
-  category: { _id: string; name: string; slug: string };
+  category: { id: string; name: string; slug: string };
   description: string;
   quantity: number;
   brands: { brandName: string; sizes: { size: string; price: number }[] }[];

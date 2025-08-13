@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import ProductCard from "@/components/products/ProductCard";
+import ProductCard, { Product as ProductCardType } from "@/components/products/ProductCard";
 import { absoluteFetch } from "@/lib/absoluteFetch";
 import type { Metadata } from "next";
 
-// Types
+// Types from API
 interface BrandSize {
   size: string;
   price: number;
@@ -14,18 +14,18 @@ interface Brand {
   sizes: BrandSize[];
 }
 
-interface Category {
+interface CategoryFromAPI {
   _id: string;
   name: string;
   slug: string;
   image?: string;
 }
 
-interface Product {
+interface ProductFromAPI {
   _id: string;
   slug: string;
   name: string;
-  category: Category;
+  category: CategoryFromAPI;
   description: string;
   quantity: number;
   brands: Brand[];
@@ -36,23 +36,21 @@ interface Product {
 }
 
 // -------- Fetch functions --------
-async function getCategoryBySlug(slug: string): Promise<Category | null> {
+async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> {
   try {
-    const category = await absoluteFetch<Category>(`/api/admin/categories/slug/${slug}`, {
+    return await absoluteFetch<CategoryFromAPI>(`/api/admin/categories/slug/${slug}`, {
       next: { revalidate: 60 },
     });
-    return category;
   } catch {
     return null;
   }
 }
 
-async function getProductsByCategoryId(categoryId: string): Promise<Product[]> {
+async function getProductsByCategoryId(categoryId: string): Promise<ProductFromAPI[]> {
   try {
-    const products = await absoluteFetch<Product[]>(`/api/admin/products/category/${categoryId}`, {
+    return await absoluteFetch<ProductFromAPI[]>(`/api/admin/products/category/${categoryId}`, {
       next: { revalidate: 60 },
     });
-    return products;
   } catch {
     return [];
   }
@@ -114,9 +112,20 @@ export default async function ProductsByCategory({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-8">
-          {products.map((product) => (
-            <ProductCard key={product._id} product={product} />
-          ))}
+          {products.map((product) => {
+            const productForCard: ProductCardType = {
+              ...product,
+              id: product._id, // ✅ map _id → id for ProductCard
+              category: product.category
+                ? {
+                    id: product.category._id, // ✅ map _id → id for category
+                    name: product.category.name,
+                    slug: product.category.slug,
+                  }
+                : null,
+            };
+            return <ProductCard key={product._id} product={productForCard} />;
+          })}
         </div>
       )}
     </div>
