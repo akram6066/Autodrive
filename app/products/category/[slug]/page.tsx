@@ -38,7 +38,7 @@ interface ProductFromAPI {
 // -------- Fetch functions --------
 async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> {
   try {
-    return await absoluteFetch<CategoryFromAPI>(`/api/categories/slug/${slug}`, {
+    return await absoluteFetch<CategoryFromAPI>(`/api/admin/categories/slug/${slug}`, {
       next: { revalidate: 60 },
     });
   } catch {
@@ -48,7 +48,7 @@ async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> 
 
 async function getProductsByCategoryId(categoryId: string): Promise<ProductFromAPI[]> {
   try {
-    return await absoluteFetch<ProductFromAPI[]>(`/api/products/category/${categoryId}`, {
+    return await absoluteFetch<ProductFromAPI[]>(`/api/admin/products/category/${categoryId}`, {
       next: { revalidate: 60 },
     });
   } catch {
