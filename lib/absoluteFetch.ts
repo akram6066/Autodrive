@@ -33,16 +33,16 @@
 
 
 export async function absoluteFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  // Determine base URL using same logic as in RootLayout
+  // Determine base URL dynamically without exposing real secrets
   const baseUrl =
     process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "") ||
     (typeof window !== "undefined"
-      ? window.location.origin
+      ? window.location.origin // Browser: same origin
       : process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000"); // Local dev fallback
+      ? `https://${process.env.VERCEL_URL}` // Vercel server: deployment URL
+      : "http://placeholder.local" // Safe placeholder for local dev
+    );
 
-  // Ensure path has leading slash
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
   let res: Response;
@@ -52,9 +52,7 @@ export async function absoluteFetch<T>(path: string, options?: RequestInit): Pro
       ...options,
     });
   } catch (networkError) {
-    throw new Error(
-      `🌐 Network error while fetching ${url}: ${(networkError as Error).message}`
-    );
+    throw new Error(`🌐 Network error while fetching ${url}: ${(networkError as Error).message}`);
   }
 
   if (!res.ok) {
@@ -65,8 +63,6 @@ export async function absoluteFetch<T>(path: string, options?: RequestInit): Pro
     const data: unknown = await res.json();
     return data as T;
   } catch (parseError) {
-    throw new Error(
-      `📦 Failed to parse JSON from ${url}: ${(parseError as Error).message}`
-    );
+    throw new Error(`📦 Failed to parse JSON from ${url}: ${(parseError as Error).message}`);
   }
 }
