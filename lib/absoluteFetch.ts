@@ -31,26 +31,45 @@
 //   }
 // }
 
-export async function absoluteFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  // Remove trailing slash from env var if present
-  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "");
+// lib/absoluteFetch.ts
+type AbsoluteFetchOptions = RequestInit & {
+  auth?: boolean; // true if API requires auth
+  token?: string; // optional custom token
+};
 
-  // If not set in env, fall back dynamically (avoids hardcoding localhost or prod domain)
-  if (!baseUrl) {
-    if (typeof window !== "undefined") {
-      baseUrl = window.location.origin;
-    } else {
-      // Use a placeholder to avoid Netlify's secrets scanner detecting actual URLs
-      baseUrl = "http://placeholder.local";
+export async function absoluteFetch<T>(
+  path: string,
+  options?: AbsoluteFetchOptions
+): Promise<T> {
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+
+  const defaultHeaders: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+
+  // Attach authentication if required
+  if (options?.auth) {
+    const token =
+      options.token ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("token")
+        : process.env.API_SECRET_TOKEN);
+
+    if (token) {
+      defaultHeaders["Authorization"] = `Bearer ${token}`;
     }
   }
-
-  const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
   let res: Response;
   try {
     res = await fetch(url, {
-      method: "GET",
+      method: options?.method || "GET",
+      credentials: options?.auth ? "include" : "same-origin", // cookies if needed
+      headers: {
+        ...defaultHeaders,
+        ...(options?.headers || {}),
+      },
       ...options,
     });
   } catch (networkError) {
@@ -62,9 +81,29 @@ export async function absoluteFetch<T>(path: string, options?: RequestInit): Pro
   }
 
   try {
-    const data: unknown = await res.json();
-    return data as T;
+    return (await res.json()) as T;
   } catch (parseError) {
     throw new Error(`📦 Failed to parse JSON from ${url}: ${(parseError as Error).message}`);
   }
+}
+
+function getBaseUrl() {
+  // Priority: Env var → window origin → Vercel → Netlify → Local
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return process.env.NEXT_PUBLIC_BASE_URL.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  if (process.env.URL) {
+    return process.env.URL;
+  }
+
+  return "http://localhost:3000";
 }
