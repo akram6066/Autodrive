@@ -57,27 +57,30 @@ import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
 
-// ✅ Define all public admin API endpoints as a typed constant
+// ✅ Define all public admin API endpoints as a readonly tuple
 const publicAdminAPIs = [
   "/api/admin/categories/slug",      // category by slug
   "/api/admin/products/category",    // products by category ID
 ] as const;
 
 // 🔹 Type for public admin endpoints
-//type PublicAdminEndpoint = typeof publicAdminAPIs[number];
+type PublicAdminEndpoint = (typeof publicAdminAPIs)[number];
 
 /**
- * Check if the given path matches any public admin API.
- * This ensures we only expose the intended endpoints.
+ * Check if the given path matches any explicitly allowed public admin API.
+ * Using the PublicAdminEndpoint type ensures we only work with known paths.
  */
 function isPublicAdminEndpoint(pathname: string): boolean {
-  return publicAdminAPIs.some(publicPath => pathname.startsWith(publicPath));
+  return (publicAdminAPIs as readonly PublicAdminEndpoint[])
+    .some(publicPath =>
+      pathname === publicPath || pathname.startsWith(`${publicPath}/`)
+    );
 }
 
 export async function middleware(req: NextRequest) {
   const token = await getToken({ req });
   const isAdmin = token?.role === "admin";
-  const pathname = req.nextUrl.pathname;
+  const pathname = req.nextUrl.pathname as string;
 
   // 1️⃣ Protect admin dashboard pages
   if (pathname.startsWith("/admin") && !isAdmin) {
