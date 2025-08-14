@@ -114,7 +114,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose, { FilterQuery } from "mongoose";
 import dbConnect from "@/lib/dbConnect";
 import Product, { IProduct, Brand as BrandType, Size as SizeType } from "@/models/Product";
-
+import "@/models/Category"; // ✅ Ensure Category model is registered
 
 interface PopulatedCategory {
   _id: mongoose.Types.ObjectId;
@@ -128,115 +128,143 @@ type LeanProduct = Omit<IProduct, "category"> & {
 };
 
 export async function GET(request: NextRequest) {
-  await dbConnect();
+  try {
+    await dbConnect();
 
-  const { searchParams } = new URL(request.url);
-  const query: FilterQuery<IProduct> = {};
-  const andFilters: FilterQuery<IProduct>[] = [];
+    const { searchParams } = new URL(request.url);
+    const query: FilterQuery<IProduct> = {};
+    const andFilters: FilterQuery<IProduct>[] = [];
 
-  // Query params
-  const search = searchParams.get("search")?.trim() || "";
-  const categoryParam = searchParams.get("category");
-  const brandParam = searchParams.get("brand");
-  const sizeParam = searchParams.get("size");
-  const minPrice = Number(searchParams.get("minPrice") || 0);
-  const maxPrice = Number(searchParams.get("maxPrice") || 0);
-  const page = Math.max(1, Number(searchParams.get("page") || 1));
-  const limit = Math.max(1, Number(searchParams.get("limit") || 12));
-  const skip = (page - 1) * limit;
+    // Query params
+    const search = searchParams.get("search")?.trim() || "";
+    const categoryParam = searchParams.get("category");
+    const brandParam = searchParams.get("brand");
+    const sizeParam = searchParams.get("size");
+    const minPrice = Number(searchParams.get("minPrice") || 0);
+    const maxPrice = Number(searchParams.get("maxPrice") || 0);
+    const page = Math.max(1, Number(searchParams.get("page") || 1));
+    const limit = Math.max(1, Number(searchParams.get("limit") || 12));
+    const skip = (page - 1) * limit;
 
-  // Search filter
-  if (search) {
-    andFilters.push({
-      $or: [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { "brands.brandName": { $regex: search, $options: "i" } },
-        { "brands.sizes.size": { $regex: search, $options: "i" } },
-      ],
-    });
-  }
-
-  // Category filter
-  if (categoryParam) {
-    const categoryIds = categoryParam
-      .split(",")
-      .filter((id) => mongoose.Types.ObjectId.isValid(id));
-    if (categoryIds.length) {
-      andFilters.push({ category: { $in: categoryIds } });
+    // Search filter
+    if (search) {
+      andFilters.push({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+          { "brands.brandName": { $regex: search, $options: "i" } },
+          { "brands.sizes.size": { $regex: search, $options: "i" } },
+        ],
+      });
     }
-  }
 
-  // Brand filter
-  if (brandParam) {
-    const brands = brandParam.split(",").map((b) => b.trim());
-    andFilters.push({ "brands.brandName": { $in: brands } });
-  }
+    // Category filter
+    if (categoryParam) {
+      const categoryIds = categoryParam
+        .split(",")
+        .filter((id) => mongoose.Types.ObjectId.isValid(id));
+      if (categoryIds.length) {
+        andFilters.push({ category: { $in: categoryIds } });
+      }
+    }
 
-  // Size filter
-  if (sizeParam) {
-    const sizes = sizeParam.split(",").map((s) => s.trim());
-    andFilters.push({ "brands.sizes.size": { $in: sizes } });
-  }
+    // Brand filter
+    if (brandParam) {
+      const brands = brandParam.split(",").map((b) => b.trim());
+      andFilters.push({ "brands.brandName": { $in: brands } });
+    }
 
-  // Price filter
-  if (minPrice > 0 || maxPrice > 0) {
-    const priceCondition: Record<string, number> = {};
-    if (minPrice > 0) priceCondition.$gte = minPrice;
-    if (maxPrice > 0) priceCondition.$lte = maxPrice;
+    // Size filter
+    if (sizeParam) {
+      const sizes = sizeParam.split(",").map((s) => s.trim());
+      andFilters.push({ "brands.sizes.size": { $in: sizes } });
+    }
 
-    andFilters.push({
-      $or: [
-        { discountPrice: priceCondition },
-        { "brands.sizes.price": priceCondition },
-      ],
-    });
-  }
+    // Price filter
+    if (minPrice > 0 || maxPrice > 0) {
+      const priceCondition: Record<string, number> = {};
+      if (minPrice > 0) priceCondition.$gte = minPrice;
+      if (maxPrice > 0) priceCondition.$lte = maxPrice;
 
-  // Combine filters
-  if (andFilters.length) {
-    query.$and = andFilters;
-  }
+      andFilters.push({
+        $or: [
+          { discountPrice: priceCondition },
+          { "brands.sizes.price": priceCondition },
+        ],
+      });
+    }
 
-  // Query DB with lean + projection
-  const [total, products] = await Promise.all([
-    Product.countDocuments(query),
-    Product.find(query)
-      .populate<{ category: PopulatedCategory }>("category", "name slug") // ✅ works now
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .select(
-        "slug name description quantity discountPrice isOffer image category brands"
-      )
-      .lean<LeanProduct[]>(),
-  ]);
+    // Combine filters
+    if (andFilters.length) {
+      query.$and = andFilters;
+    }
 
-  // Map response
-  const formatted = products.map((p) => ({
-    id: p._id.toString(),
-    slug: p.slug,
-    name: p.name,
-    description: p.description,
-    quantity: p.quantity,
-    discountPrice: p.discountPrice ?? null,
-    isOffer: p.isOffer ?? false,
-    image: p.image,
-    category: p.category
-      ? {
-          id: p.category._id.toString(),
-          name: p.category.name,
-          slug: p.category.slug,
-        }
-      : null,
-    brands: p.brands.map((b: BrandType) => ({
-      brandName: b.brandName,
-      sizes: b.sizes.map((s: SizeType) => ({
-        size: s.size,
-        price: s.price,
+    // Query DB with lean + populate
+    const [total, products] = await Promise.all([
+      Product.countDocuments(query),
+      Product.find(query)
+        .populate<{ category: PopulatedCategory }>("category", "name slug")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select(
+          "slug name description quantity discountPrice isOffer image category brands"
+        )
+        .lean<LeanProduct[]>(),
+    ]);
+
+    // Format response
+    const formatted = products.map((p) => ({
+      id: p._id.toString(),
+      slug: p.slug,
+      name: p.name,
+      description: p.description,
+      quantity: p.quantity,
+      discountPrice: p.discountPrice ?? null,
+      isOffer: p.isOffer ?? false,
+      image: p.image,
+      category: p.category
+        ? {
+            id: p.category._id.toString(),
+            name: p.category.name,
+            slug: p.category.slug,
+          }
+        : null,
+      brands: p.brands.map((b: BrandType) => ({
+        brandName: b.brandName,
+        sizes: b.sizes.map((s: SizeType) => ({
+          size: s.size,
+          price: s.price,
+        })),
       })),
-    })),
-  }));
+    }));
 
-  return NextResponse.json({ total, products: formatted });
+    return NextResponse.json({ total, products: formatted });
+  } catch (error: unknown) {
+    // ✅ Type-safe error handling
+    if (error instanceof Error) {
+      console.error("[/api/products] error:", error);
+
+      if (
+        error.name === "MongoNetworkError" ||
+        error.name === "MongoNetworkTimeoutError"
+      ) {
+        return NextResponse.json(
+          { message: "MongoDB connection failed. Please check your connection." },
+          { status: 503 }
+        );
+      }
+
+      return NextResponse.json(
+        { message: "Internal Server Error", error: error.message },
+        { status: 500 }
+      );
+    }
+
+    console.error("[/api/products] unknown error:", error);
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 }
+    );
+  }
 }
