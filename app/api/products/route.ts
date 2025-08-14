@@ -109,12 +109,12 @@
 //   return NextResponse.json({ total, products: formatted });
 // }
 
-
 // app/api/products/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { FilterQuery } from "mongoose";
 import dbConnect from "@/lib/dbConnect";
 import Product, { IProduct, Brand as BrandType, Size as SizeType } from "@/models/Product";
+
 
 interface PopulatedCategory {
   _id: mongoose.Types.ObjectId;
@@ -202,17 +202,17 @@ export async function GET(request: NextRequest) {
   const [total, products] = await Promise.all([
     Product.countDocuments(query),
     Product.find(query)
-      .populate<{ category: PopulatedCategory }>("category", "name slug")
+      .populate<{ category: PopulatedCategory }>("category", "name slug") // ✅ works now
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .select(
         "slug name description quantity discountPrice isOffer image category brands"
       )
-      .lean<LeanProduct[]>(), // ✅ Strong typing for lean docs
+      .lean<LeanProduct[]>(),
   ]);
 
-  // Map response with proper typing
+  // Map response
   const formatted = products.map((p) => ({
     id: p._id.toString(),
     slug: p.slug,
