@@ -1,25 +1,24 @@
-// export async function absoluteFetch<T>(path: string, options?: RequestInit): Promise<T> {
-//   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
 
-//   if (!baseUrl) {
-//     throw new Error("NEXT_PUBLIC_BASE_URL is not defined in environment variables");
-//   }
 
-//   const res = await fetch(`${baseUrl}${path}`, options);
-// // 
-//   if (!res.ok) {
-//     throw new Error(`Request failed with status ${res.status}`);
-//   }
+import { headers } from "next/headers";
 
-//   const data: T = await res.json();
-//   return data;
-// }
-
-export async function absoluteFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "");
+/**
+ * Fetch data from an internal or external API.
+ * - Uses NEXT_PUBLIC_BASE_URL if defined.
+ * - Falls back to runtime host detection in Server Components.
+ */
+export async function absoluteFetch<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  // Build base URL safely
+  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "");
 
   if (!baseUrl) {
-    throw new Error("❌ NEXT_PUBLIC_BASE_URL is not defined in environment variables");
+    // This works in Server Components (Next.js 13+)
+    const host = headers().get("host");
+    const protocol = host?.includes("localhost") ? "http" : "https";
+    baseUrl = `${protocol}://${host}`;
   }
 
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
@@ -31,17 +30,19 @@ export async function absoluteFetch<T>(path: string, options?: RequestInit): Pro
       ...options,
     });
   } catch (networkError) {
-    throw new Error(`🌐 Network error while fetching ${url}: ${(networkError as Error).message}`);
+    console.error(`🌐 Network error while fetching ${url}:`, networkError);
+    throw new Error(`Network request failed: ${url}`);
   }
 
   if (!res.ok) {
-    throw new Error(`⚠️ Request to ${url} failed with status ${res.status} ${res.statusText}`);
+    console.error(`⚠️ Request failed: ${url}`, res.status, res.statusText);
+    throw new Error(`Fetch error: ${res.status} ${res.statusText}`);
   }
 
   try {
-    const data: unknown = await res.json();
-    return data as T;
+    return (await res.json()) as T;
   } catch (parseError) {
-    throw new Error(`📦 Failed to parse JSON from ${url}: ${(parseError as Error).message}`);
+    console.error(`📦 JSON parse error: ${url}`, parseError);
+    throw new Error(`Invalid JSON response from ${url}`);
   }
 }
