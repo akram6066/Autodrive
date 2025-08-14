@@ -3,17 +3,14 @@ import mongoose from "mongoose";
 import dbConnect from "@/lib/dbConnect";
 import Review from "@/models/Review";
 
-/**
- * GET /api/reviews/product/[id]/stats
- * Returns aggregated review stats for a product
- */
+// ✅ GET handler for product review stats
 export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
+  _request: Request,
+  context: { params: Promise<{ productId: string }> }
 ) {
-  const { id: productId } = params;
+  const { productId } = await context.params; // ✅ Await params in Next.js 15
 
-  // ✅ Validate ObjectId
+  // Validate ObjectId
   if (!mongoose.Types.ObjectId.isValid(productId)) {
     return NextResponse.json(
       { message: "Invalid product ID" },
@@ -22,59 +19,34 @@ export async function GET(
   }
 
   try {
-    // ✅ Cached DB connection
+    // ✅ Connect to MongoDB (cached)
     await dbConnect();
 
-    // ✅ Use aggregation for fast stats
+    // ✅ Fast aggregation with index usage
     const stats = await Review.aggregate([
       { $match: { product: new mongoose.Types.ObjectId(productId) } },
       {
         $group: {
           _id: "$product",
-          totalReviews: { $sum: 1 },
           averageRating: { $avg: "$rating" },
-          ratingsCount: {
-            $push: "$rating",
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalReviews: 1,
-          averageRating: { $round: ["$averageRating", 1] }, // Round to 1 decimal
-          ratingBreakdown: {
-            $arrayToObject: {
-              $map: {
-                input: [1, 2, 3, 4, 5],
-                as: "star",
-                in: [
-                  { $toString: "$$star" },
-                  {
-                    $size: {
-                      $filter: {
-                        input: "$ratingsCount",
-                        as: "r",
-                        cond: { $eq: ["$$r", "$$star"] },
-                      },
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        },
-      },
+          totalReviews: { $sum: 1 },
+          ratingsBreakdown: {
+            $push: "$rating"
+          }
+        }
+      }
     ]);
 
-    return NextResponse.json(stats[0] || {
-      totalReviews: 0,
-      averageRating: 0,
-      ratingBreakdown: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 }
-    });
+    if (!stats.length) {
+      return NextResponse.json(
+        { averageRating: 0, totalReviews: 0, ratingsBreakdown: [] },
+        { status: 200 }
+      );
+    }
 
+    return NextResponse.json(stats[0], { status: 200 });
   } catch (error) {
-    console.error("❌ Error fetching review stats:", error);
+    console.error("Error fetching review stats:", error);
     return NextResponse.json(
       { message: "Failed to fetch review stats" },
       { status: 500 }
