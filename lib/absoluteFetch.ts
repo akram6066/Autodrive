@@ -33,15 +33,16 @@
 
 
 export async function absoluteFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "");
+  // Determine base URL using same logic as in RootLayout
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "") ||
+    (typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000"); // Local dev fallback
 
-  // If no baseUrl, use relative path (works for Next.js internal API routes in prod)
-  if (!baseUrl) {
-    baseUrl = typeof window === "undefined" 
-      ? `https://${process.env.VERCEL_URL}` // server-side in Vercel
-      : ""; // client-side, browser will use current origin
-  }
-
+  // Ensure path has leading slash
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
   let res: Response;
@@ -51,7 +52,9 @@ export async function absoluteFetch<T>(path: string, options?: RequestInit): Pro
       ...options,
     });
   } catch (networkError) {
-    throw new Error(`🌐 Network error while fetching ${url}: ${(networkError as Error).message}`);
+    throw new Error(
+      `🌐 Network error while fetching ${url}: ${(networkError as Error).message}`
+    );
   }
 
   if (!res.ok) {
@@ -62,6 +65,8 @@ export async function absoluteFetch<T>(path: string, options?: RequestInit): Pro
     const data: unknown = await res.json();
     return data as T;
   } catch (parseError) {
-    throw new Error(`📦 Failed to parse JSON from ${url}: ${(parseError as Error).message}`);
+    throw new Error(
+      `📦 Failed to parse JSON from ${url}: ${(parseError as Error).message}`
+    );
   }
 }
