@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 import "@/models/Category"; // ✅ Register Category model for .populate to work
 import slugify from "slugify";
 import { customAlphabet } from "nanoid";

@@ -3,7 +3,7 @@ import slugify from "slugify";
 import dbConnectScript from "@/lib/dbConnectScript";  // ✅ Correct import
 
 import Category from "@/models/Category";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 
 async function migrateCategorySlugs() {
   const categories = await Category.find({ slug: { $exists: false } });

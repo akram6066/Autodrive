@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Cart from "@/models/Cart";
-import Product, { IProduct } from "@/models/Product";
+import Product, { IProduct } from "@/models/ProductType";
 import { getAuthUser } from "@/lib/getAuthUser";
 
 interface Variant {

@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/dbConnect";
 import Order from "@/models/Order";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 
 // --- Types ---
 interface CallbackItem {

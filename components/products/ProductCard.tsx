@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import type { CartItem } from "@/types/CartItem";
 
+// -------------------- Types --------------------
 interface BrandSize {
   size: string;
   price: number;
@@ -26,24 +27,28 @@ interface Category {
 }
 
 export interface Product {
-  id: string; // ✅ API now returns id instead of _id
+  id: string; // ✅ consistent id
   slug: string;
   name: string;
   category: Category | null;
   description: string;
   quantity: number;
   brands: Brand[];
-  image?: string;
+  image?: string;      // main image
+  images?: string[];
   discountPrice?: number;
   isOffer?: boolean;
+   rating?: number; // ✅ add this
 }
 
-interface Props {
+export interface ProductCardProps {
   product: Product;
 }
 
+// -------------------- Helpers --------------------
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+// -------------------- Rating Stars --------------------
 const RatingStars = React.memo(
   ({
     productId,
@@ -65,7 +70,11 @@ const RatingStars = React.memo(
             <Star
               key={`${productId}-star-${i}`}
               size={16}
-              className={active ? "text-yellow-400 cursor-pointer" : "text-gray-300 cursor-pointer"}
+              className={
+                active
+                  ? "text-yellow-400 cursor-pointer"
+                  : "text-gray-300 cursor-pointer"
+              }
               fill={active ? "yellow" : "none"}
               onMouseEnter={(e) => {
                 e.stopPropagation();
@@ -88,7 +97,8 @@ const RatingStars = React.memo(
 );
 RatingStars.displayName = "RatingStars";
 
-export default function ProductCard({ product }: Props) {
+// -------------------- Product Card --------------------
+function ProductCardComponent({ product }: ProductCardProps) {
   const router = useRouter();
   const addItem = useCartStore((state) => state.addItem);
 
@@ -98,13 +108,15 @@ export default function ProductCard({ product }: Props) {
   const originalPrice = size?.price ?? 0;
   const discount = product.discountPrice ?? originalPrice;
   const discountPercent =
-    originalPrice > 0 ? Math.round(((originalPrice - discount) / originalPrice) * 100) : 0;
+    originalPrice > 0
+      ? Math.round(((originalPrice - discount) / originalPrice) * 100)
+      : 0;
 
   const { data: stats, mutate } = useSWR<{ averageRating: number }>(
-    `/api/reviews/product/${product.id}/stats`, // ✅ uses new id
+    product.id ? `/api/reviews/product/${product.id}/stats` : null,
     fetcher
   );
-  const averageRating = stats?.averageRating || 0;
+  const averageRating = stats?.averageRating ?? 0;
 
   const handleAddToCart = useCallback(
     (e: React.MouseEvent) => {
@@ -128,7 +140,7 @@ export default function ProductCard({ product }: Props) {
       };
 
       addItem(item);
-      toast.success(`${product.name} added to cart!`);
+      toast.success(`${product.name} added to cart`);
     },
     [addItem, brand, size, product]
   );
@@ -159,15 +171,21 @@ export default function ProductCard({ product }: Props) {
     if (product.discountPrice) {
       return (
         <>
-          <span className="text-gray-400 text-sm line-through">KES {originalPrice}</span>
+          <span className="text-gray-400 text-sm line-through">
+            KES {originalPrice}
+          </span>
           <span className="text-red-600 text-xl font-bold">KES {discount}</span>
           {discountPercent > 0 && (
-            <span className="text-green-600 text-xs font-semibold">({discountPercent}% OFF)</span>
+            <span className="text-green-600 text-xs font-semibold">
+              ({discountPercent}% OFF)
+            </span>
           )}
         </>
       );
     }
-    return <span className="text-black text-xl font-bold">KES {originalPrice}</span>;
+    return (
+      <span className="text-black text-xl font-bold">KES {originalPrice}</span>
+    );
   }, [product.discountPrice, originalPrice, discount, discountPercent]);
 
   return (
@@ -203,7 +221,11 @@ export default function ProductCard({ product }: Props) {
           )}
         </h3>
         <p className="text-xs text-gray-500">{product.category?.name}</p>
-        <RatingStars productId={product.id} averageRating={averageRating} onRate={handleRate} />
+        <RatingStars
+          productId={product.id}
+          averageRating={averageRating}
+          onRate={handleRate}
+        />
       </div>
 
       {/* Price & Cart */}
@@ -227,3 +249,6 @@ export default function ProductCard({ product }: Props) {
     </div>
   );
 }
+
+// ✅ Memoize entire card for grids
+export default React.memo(ProductCardComponent);

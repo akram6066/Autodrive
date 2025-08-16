@@ -1,7 +1,7 @@
 // pages/api/products/reduce-stock.ts
 import type { NextApiRequest, NextApiResponse } from "next";
 import connectDB from "@/lib/dbConnect";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 import { Document } from "mongoose";
 
 // ---- Types ----

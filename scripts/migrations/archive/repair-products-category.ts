@@ -4,7 +4,7 @@ dotenv.config({ path: ".env.local" });
 
 import dbConnectScript from "@/lib/dbConnectScript";
 import Category from "@/models/Category";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 
 async function repairProductCategories() {
   await dbConnectScript();

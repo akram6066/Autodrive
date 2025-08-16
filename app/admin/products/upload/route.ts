@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import path from "path";
 import fs from "fs/promises";
 import dbConnect from "@/lib/dbConnect";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 
 export async function POST(req: Request) {
   await dbConnect();

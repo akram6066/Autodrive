@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
 import ReviewModel from "@/models/Review";
-import ProductModel from "@/models/Product";
+import ProductModel from "@/models/ProductType";
 import mongoose from "mongoose";
 
 interface ReviewBody {

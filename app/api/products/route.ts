@@ -109,23 +109,57 @@
 //   return NextResponse.json({ total, products: formatted });
 // }
 
+
 // app/api/products/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import mongoose, { FilterQuery } from "mongoose";
 import dbConnect from "@/lib/dbConnect";
-import Product, { IProduct, Brand as BrandType, Size as SizeType } from "@/models/Product";
-import "@/models/Category"; // ✅ Ensure Category model is registered
+import Product, { IProduct } from "@/models/ProductType";
+import "@/models/Category";
+import { ProductsApiResponse, Product as ProductType } from "@/types/product";
 
+// Populated category type
 interface PopulatedCategory {
   _id: mongoose.Types.ObjectId;
   name: string;
   slug: string;
 }
 
+// Lean product type returned by Mongoose
 type LeanProduct = Omit<IProduct, "category"> & {
   _id: mongoose.Types.ObjectId;
   category?: PopulatedCategory | null;
+  images?: string[]; // optional images array
 };
+
+// Serializer to convert LeanProduct → ProductType for frontend
+function serializeProduct(p: LeanProduct): ProductType {
+  return {
+    id: p._id.toString(),
+    slug: p.slug,
+    name: p.name,
+    description: p.description,
+    quantity: p.quantity,
+    discountPrice: p.discountPrice ?? null,
+    isOffer: p.isOffer ?? false,
+    image: p.image || (Array.isArray(p.images) ? p.images[0] : ""), // main image fallback
+    images: Array.isArray(p.images) ? p.images : [], // optional gallery
+    category: p.category
+      ? {
+          id: p.category._id.toString(),
+          name: p.category.name,
+          slug: p.category.slug,
+        }
+      : null,
+    brands: p.brands.map((b) => ({
+      brandName: b.brandName,
+      sizes: b.sizes.map((s) => ({
+        size: s.size,
+        price: s.price,
+      })),
+    })),
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -146,7 +180,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.max(1, Number(searchParams.get("limit") || 12));
     const skip = (page - 1) * limit;
 
-    // Search filter
+    // 🔎 Search filter
     if (search) {
       andFilters.push({
         $or: [
@@ -158,7 +192,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Category filter
+    // 📂 Category filter
     if (categoryParam) {
       const categoryIds = categoryParam
         .split(",")
@@ -168,19 +202,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Brand filter
+    // 🏷️ Brand filter
     if (brandParam) {
       const brands = brandParam.split(",").map((b) => b.trim());
       andFilters.push({ "brands.brandName": { $in: brands } });
     }
 
-    // Size filter
+    // 📏 Size filter
     if (sizeParam) {
       const sizes = sizeParam.split(",").map((s) => s.trim());
       andFilters.push({ "brands.sizes.size": { $in: sizes } });
     }
 
-    // Price filter
+    // 💰 Price filter
     if (minPrice > 0 || maxPrice > 0) {
       const priceCondition: Record<string, number> = {};
       if (minPrice > 0) priceCondition.$gte = minPrice;
@@ -194,12 +228,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Combine filters
+    // ✅ Combine filters
     if (andFilters.length) {
       query.$and = andFilters;
     }
 
-    // Query DB with lean + populate
+    // 📦 Query DB
     const [total, products] = await Promise.all([
       Product.countDocuments(query),
       Product.find(query)
@@ -208,43 +242,21 @@ export async function GET(request: NextRequest) {
         .skip(skip)
         .limit(limit)
         .select(
-          "slug name description quantity discountPrice isOffer image category brands"
+          "slug name description quantity discountPrice isOffer image images category brands"
         )
         .lean<LeanProduct[]>(),
     ]);
 
-    // Format response
-    const formatted = products.map((p) => ({
-      id: p._id.toString(),
-      slug: p.slug,
-      name: p.name,
-      description: p.description,
-      quantity: p.quantity,
-      discountPrice: p.discountPrice ?? null,
-      isOffer: p.isOffer ?? false,
-      image: p.image,
-      category: p.category
-        ? {
-            id: p.category._id.toString(),
-            name: p.category.name,
-            slug: p.category.slug,
-          }
-        : null,
-      brands: p.brands.map((b: BrandType) => ({
-        brandName: b.brandName,
-        sizes: b.sizes.map((s: SizeType) => ({
-          size: s.size,
-          price: s.price,
-        })),
-      })),
-    }));
+    // 🛠️ Serialize products
+    const formatted: ProductType[] = products.map(serializeProduct);
 
-    return NextResponse.json({ total, products: formatted });
+    return NextResponse.json<ProductsApiResponse>({
+      total,
+      products: formatted,
+    });
   } catch (error: unknown) {
-    // ✅ Type-safe error handling
+    console.error("[/api/products] error:", error);
     if (error instanceof Error) {
-      console.error("[/api/products] error:", error);
-
       if (
         error.name === "MongoNetworkError" ||
         error.name === "MongoNetworkTimeoutError"
@@ -254,14 +266,12 @@ export async function GET(request: NextRequest) {
           { status: 503 }
         );
       }
-
       return NextResponse.json(
         { message: "Internal Server Error", error: error.message },
         { status: 500 }
       );
     }
 
-    console.error("[/api/products] unknown error:", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
       { status: 500 }

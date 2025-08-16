@@ -32,7 +32,7 @@ export default function AddToCartButton({ product, selectedSize }: Props) {
     }
 
     const item = {
-      productId: product._id,
+      productId: product.id,
       name: product.name,
       price: price,
       discountPrice: product.discountPrice ?? price,

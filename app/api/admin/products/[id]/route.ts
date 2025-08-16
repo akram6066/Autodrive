@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 import path from "path";
 import fs from "fs/promises";
 import slugify from "slugify";

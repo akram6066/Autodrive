@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Review, { ReviewDocument } from "@/models/Review";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 import { FilterQuery } from "mongoose";
 
 export async function GET(req: Request) {

@@ -5,7 +5,7 @@ import mongoose, { Document } from "mongoose";
 import { authOptions } from "@/lib/auth";
 import connectDB from "@/lib/dbConnect";
 import Order from "@/models/Order";
-import Product from "@/models/Product";
+import Product from "@/models/ProductType";
 import User from "@/models/User";
 
 // ---------- Types ----------

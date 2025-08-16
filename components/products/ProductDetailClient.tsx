@@ -52,7 +52,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
   useEffect(() => {
     const controller = new AbortController();
 
-    fetch(`/api/reviews/product/${product._id}/stats`, {
+    fetch(`/api/reviews/product/${product.id}/stats`, {
       signal: controller.signal,
       cache: "no-cache",
     })
@@ -70,7 +70,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
       });
 
     return () => controller.abort();
-  }, [product._id]);
+  }, [product.id]);
 
   return (
     <main className="max-w-7xl mx-auto py-16 px-4">
@@ -98,7 +98,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
             <div className="flex items-center gap-2 mb-4 text-sm">
               <span>Category:</span>
               <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full">
-                {product.category.name}
+                {product.category?.name ?? "Uncategorized"}
               </span>
             </div>
 
@@ -153,7 +153,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
             </div>
 
             {/* Review Form */}
-            <ReviewForm productId={product._id} onStatsUpdate={setStats} />
+            <ReviewForm productId={product.id} onStatsUpdate={setStats} />
           </div>
 
           {/* Extra Info */}
