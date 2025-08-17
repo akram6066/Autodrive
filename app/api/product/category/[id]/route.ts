@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Product from "@/models/ProductType";
 
-// Handler must return a Promise<Response>
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
-): Promise<NextResponse> {
+  context: { params: { id: string } }  // ✅ plain object, not Promise
+) {
   await dbConnect();
 
-  const { id } = params;
+  const { id } = context.params; // ✅ must use `context.params`
 
   try {
     const products = await Product.find({ category: id }).populate("category");
