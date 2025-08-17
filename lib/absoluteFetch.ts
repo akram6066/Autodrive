@@ -70,11 +70,11 @@
 //   return "http://localhost:3000";
 // }
 
-
 // lib/absoluteFetch.ts
 type AbsoluteFetchOptions = RequestInit & {
   auth?: boolean;   // must explicitly set true to send auth
   token?: string;   // optional override token
+  next?: { revalidate?: number }; // allow ISR revalidate
 };
 
 export async function absoluteFetch<T>(
@@ -93,7 +93,9 @@ export async function absoluteFetch<T>(
   if (options.auth) {
     const token =
       options.token ||
-      (typeof window !== "undefined" ? localStorage.getItem("token") ?? "" : process.env.API_TOKEN ?? "");
+      (typeof window !== "undefined"
+        ? localStorage.getItem("token") ?? ""
+        : process.env.API_TOKEN ?? "");
 
     if (!token) {
       throw new Error(`Authentication required for ${url}, but no token provided`);
@@ -101,16 +103,24 @@ export async function absoluteFetch<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  // Build fetch config
+  const fetchConfig: RequestInit & { next?: { revalidate?: number } } = {
+    ...options,
+    method: options.method || "GET",
+    headers,
+    credentials: options.auth ? "include" : "same-origin",
+  };
+
+  // Handle cache vs revalidate (avoid conflict)
+  if (options.next?.revalidate !== undefined) {
+    fetchConfig.next = { revalidate: options.next.revalidate };
+  } else {
+    fetchConfig.cache = options.cache ?? "no-store";
+  }
+
   let res: Response;
   try {
-    res = await fetch(url, {
-      ...options,
-      method: options.method || "GET",
-      headers,
-      // Only meaningful in browser; ignored in server
-      credentials: options.auth ? "include" : "same-origin",
-      cache: options.cache ?? "no-store",
-    });
+    res = await fetch(url, fetchConfig);
   } catch (err) {
     throw new Error(`🌐 Network error while fetching ${url}: ${(err as Error).message}`);
   }

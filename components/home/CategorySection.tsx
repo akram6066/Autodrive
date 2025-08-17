@@ -20,7 +20,7 @@ const fetcher = (url: string) =>
 
 export default function CategorySection() {
   const { data: categories, error, isLoading, mutate } = useSWR<CategoryType[]>(
-    "/api/admin/categories",
+    "/api/categories",
     fetcher,
     { revalidateOnFocus: false }
   );

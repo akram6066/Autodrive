@@ -8,7 +8,7 @@ import ProductDetailClient from "@/components/products/ProductDetailClient";
 
 async function fetchProduct(slug: string): Promise<Product | null> {
   try {
-    return await absoluteFetch<Product>(`/api/product/slug/${slug}`);
+    return await absoluteFetch<Product>(`/api/admin/products/slug/${slug}`);
   } catch {
     return null;
   }
