@@ -1,145 +1,9 @@
-// import { notFound } from "next/navigation";
-// import ProductCard, { Product as ProductCardType } from "@/components/products/ProductCard";
-// import { absoluteFetch } from "@/lib/absoluteFetch";
-// import type { Metadata } from "next";
-
-// // Types from API
-// interface BrandSize {
-//   size: string;
-//   price: number;
-// }
-
-// interface Brand {
-//   brandName: string;
-//   sizes: BrandSize[];
-// }
-
-// interface CategoryFromAPI {
-//   _id: string;
-//   name: string;
-//   slug: string;
-//   image?: string;
-// }
-
-// interface ProductFromAPI {
-//   _id: string;
-//   slug: string;
-//   name: string;
-//   category: CategoryFromAPI;
-//   description: string;
-//   quantity: number;
-//   brands: Brand[];
-//   image?: string;
-//   discountPrice?: number;
-//   isOffer?: boolean;
-//   rating?: number;
-// }
-
-// // -------- Fetch functions --------
-// async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> {
-//   try {
-//     return await absoluteFetch<CategoryFromAPI>(`/api/categories/${slug}`, {
-//       next: { revalidate: 60 },
-//     });
-//   } catch {
-//     return null;
-//   }
-// }
-
-
-// async function getProductsByCategoryId(categoryId: string): Promise<ProductFromAPI[]> {
-//   try {
-//     return await absoluteFetch<ProductFromAPI[]>(`/api/product/category/${categoryId}`, {
-//       next: { revalidate: 60 },
-//     });
-//   } catch {
-//     return [];
-//   }
-// }
-
-// // -------- Metadata for SEO --------
-// export async function generateMetadata({
-//   params,
-// }: {
-//   params: Promise<{ slug: string }>;
-// }): Promise<Metadata> {
-//   const { slug } = await params;
-//   const category = await getCategoryBySlug(slug);
-
-//   if (!category) {
-//     return {
-//       title: "Category Not Found | AutoDrive",
-//       description: "Requested category not found.",
-//     };
-//   }
-
-//   return {
-//     title: `${category.name} | AutoDrive`,
-//     description: `Explore top-quality products under ${category.name}.`,
-//     openGraph: {
-//       images: [
-//         {
-//           url: category.image || "/no-image.png",
-//           width: 800,
-//           height: 600,
-//         },
-//       ],
-//     },
-//   };
-// }
-
-// // -------- Page Component --------
-// export default async function ProductsByCategory({
-//   params,
-// }: {
-//   params: Promise<{ slug: string }>;
-// }) {
-//   const { slug } = await params;
-
-//   const category = await getCategoryBySlug(slug);
-//   if (!category) notFound();
-
-//   const products = await getProductsByCategoryId(category._id);
-
-//   return (
-//     <div className="max-w-7xl mx-auto py-16 px-4">
-//       <h1 className="text-3xl font-bold mb-10 text-primary text-center">
-//         {category.name}
-//       </h1>
-
-//       {products.length === 0 ? (
-//         <div className="text-center text-xl text-gray-500 py-24">
-//           🚫 No products available in {category.name} category.
-//         </div>
-//       ) : (
-//         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-8">
-//           {products.map((product) => {
-//             const productForCard: ProductCardType = {
-//               ...product,
-//               id: product._id, // ✅ map _id → id for ProductCard
-//               category: product.category
-//                 ? {
-//                     id: product.category._id, // ✅ map _id → id for category
-//                     name: product.category.name,
-//                     slug: product.category.slug,
-//                   }
-//                 : null,
-//             };
-//             return <ProductCard key={product._id} product={productForCard} />;
-//           })}
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
-
 import { notFound } from "next/navigation";
 import ProductCard, { Product as ProductCardType } from "@/components/products/ProductCard";
 import { absoluteFetch } from "@/lib/absoluteFetch";
 import type { Metadata } from "next";
 
-// -------- Types --------
+// Types from API
 interface BrandSize {
   size: string;
   price: number;
@@ -174,7 +38,7 @@ interface ProductFromAPI {
 // -------- Fetch functions --------
 async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> {
   try {
-    return await absoluteFetch<CategoryFromAPI>(`/api/categories/slug/${slug}`, {
+    return await absoluteFetch<CategoryFromAPI>(`/api/categories/${slug}`, {
       next: { revalidate: 60 },
     });
   } catch {
@@ -182,9 +46,10 @@ async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> 
   }
 }
 
+
 async function getProductsByCategoryId(categoryId: string): Promise<ProductFromAPI[]> {
   try {
-    return await absoluteFetch<ProductFromAPI[]>(`/api/products/category/${categoryId}`, {
+    return await absoluteFetch<ProductFromAPI[]>(`/api/product/category/${categoryId}`, {
       next: { revalidate: 60 },
     });
   } catch {
@@ -196,43 +61,29 @@ async function getProductsByCategoryId(categoryId: string): Promise<ProductFromA
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = params;
+  const { slug } = await params;
   const category = await getCategoryBySlug(slug);
 
   if (!category) {
     return {
       title: "Category Not Found | AutoDrive",
       description: "Requested category not found.",
-      robots: { index: false, follow: false },
     };
   }
 
   return {
-    title: `${category.name} Products | AutoDrive`,
-    description: `Shop premium ${category.name} products at AutoDrive. Discover discounts, offers, and top-rated items.`,
-    keywords: `${category.name}, AutoDrive, auto parts, car accessories, ${category.slug}`,
-    alternates: {
-      canonical: `/categories/${category.slug}`,
-    },
+    title: `${category.name} | AutoDrive`,
+    description: `Explore top-quality products under ${category.name}.`,
     openGraph: {
-      title: `${category.name} | AutoDrive`,
-      description: `Explore the best ${category.name} products available at AutoDrive.`,
       images: [
         {
           url: category.image || "/no-image.png",
           width: 800,
           height: 600,
-          alt: category.name,
         },
       ],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: `${category.name} | AutoDrive`,
-      description: `Check out ${category.name} products on AutoDrive.`,
-      images: [category.image || "/no-image.png"],
     },
   };
 }
@@ -241,58 +92,43 @@ export async function generateMetadata({
 export default async function ProductsByCategory({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const { slug } = params;
+  const { slug } = await params;
 
-  // Fetch category + products in parallel ✅
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
   const products = await getProductsByCategoryId(category._id);
 
   return (
-    <section className="max-w-7xl mx-auto py-16 px-4">
-      <header className="text-center mb-10">
-        <h1 className="text-3xl font-bold text-primary">
-          {category.name}
-        </h1>
-        {category.image && (
-          <img
-            src={category.image}
-            alt={category.name}
-            className="mx-auto mt-6 w-40 h-40 object-contain rounded-xl shadow-md"
-            loading="lazy"
-          />
-        )}
-      </header>
+    <div className="max-w-7xl mx-auto py-16 px-4">
+      <h1 className="text-3xl font-bold mb-10 text-primary text-center">
+        {category.name}
+      </h1>
 
       {products.length === 0 ? (
-        <p className="text-center text-xl text-gray-500 py-24">
-          🚫 No products available in <strong>{category.name}</strong> category.
-        </p>
+        <div className="text-center text-xl text-gray-500 py-24">
+          🚫 No products available in {category.name} category.
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-8">
           {products.map((product) => {
             const productForCard: ProductCardType = {
               ...product,
-              id: product._id, // map _id → id
+              id: product._id, // ✅ map _id → id for ProductCard
               category: product.category
                 ? {
-                    id: product.category._id,
+                    id: product.category._id, // ✅ map _id → id for category
                     name: product.category.name,
                     slug: product.category.slug,
                   }
                 : null,
             };
-            return (
-              <article key={product._id}>
-                <ProductCard product={productForCard} />
-              </article>
-            );
+            return <ProductCard key={product._id} product={productForCard} />;
           })}
         </div>
       )}
-    </section>
+    </div>
   );
 }
