@@ -4,11 +4,11 @@ import Product from "@/models/ProductType";
 
 export async function GET(
   _req: NextRequest,
-  context: { params: { id: string } }   // ✅ correct
+  context: { params: Promise<{ id: string }> }   // ✅ Fixed: params is now Promise<{ id: string }>
 ) {
   await dbConnect();
 
-  const { id } = context.params;
+  const { id } = await context.params;  // ✅ Fixed: await the params
 
   try {
     const products = await Product.find({ category: id }).populate("category");
