@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
 import ReviewModel from "@/models/Review";
 import ProductModel from "@/models/ProductType";
+import OrderModel from "@/models/Order"; // 🔹 check verified purchase
 import mongoose from "mongoose";
 
 interface ReviewBody {
@@ -17,14 +18,18 @@ export async function POST(req: Request) {
   try {
     await dbConnect();
 
+    // 🔹 Require login
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Please log in to write a review." },
+        { status: 401 }
+      );
     }
 
     const body: ReviewBody = await req.json();
 
-    // Validate input
+    // 🔹 Validate input
     if (
       !body.productId ||
       !mongoose.Types.ObjectId.isValid(body.productId) ||
@@ -33,10 +38,28 @@ export async function POST(req: Request) {
       body.rating > 5 ||
       !body.comment?.trim()
     ) {
-      return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid input. Please provide a valid rating and comment." },
+        { status: 400 }
+      );
     }
 
-    // Upsert review
+    // 🔹 Badge assignment
+    let badge = "New User";
+
+    // Check if user purchased this product → Verified Buyer
+    const hasOrder = await OrderModel.exists({
+      user: session.user.id,
+      "items.product": body.productId,
+      status: { $in: ["paid", "delivered"] },
+    });
+    if (hasOrder) badge = "Verified Buyer";
+
+    // Count user’s reviews → Top Reviewer
+    const reviewCount = await ReviewModel.countDocuments({ user: session.user.id });
+    if (reviewCount >= 10) badge = "Top Reviewer";
+
+    // 🔹 Upsert review with badge
     const review = await ReviewModel.findOneAndUpdate(
       { user: session.user.id, product: body.productId },
       {
@@ -44,30 +67,38 @@ export async function POST(req: Request) {
         product: body.productId,
         rating: body.rating,
         comment: body.comment.trim(),
+        badge,
       },
       { upsert: true, new: true, runValidators: true }
-    );
+    ).populate("user", "name email image");
 
     if (!review) {
-      return NextResponse.json({ error: "Failed to save review" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to save review. Please try again." },
+        { status: 500 }
+      );
     }
 
-    // Recalculate average rating
+    // 🔹 Recalculate average rating
     const agg = await ReviewModel.aggregate([
       { $match: { product: new mongoose.Types.ObjectId(body.productId) } },
       { $group: { _id: "$product", avgRating: { $avg: "$rating" } } },
     ]);
-
     const avgRating = agg[0]?.avgRating || 0;
 
-    // Update product
-    await ProductModel.findByIdAndUpdate(body.productId, {
-      rating: avgRating,
-    });
+    // Update product rating
+    await ProductModel.findByIdAndUpdate(body.productId, { rating: avgRating });
 
-    return NextResponse.json({ success: true, avgRating });
+    return NextResponse.json({
+      success: true,
+      avgRating,
+      review, // ✅ return populated review with badge + user
+    });
   } catch (err) {
     console.error("POST /api/reviews error:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Server error. Please try again later." },
+      { status: 500 }
+    );
   }
 }

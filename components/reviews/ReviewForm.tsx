@@ -1,15 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import StarRating from "./StarRating";
+import RatingStar from "./RatingStar";
+import { signIn } from "next-auth/react";
 
 type Stats = { averageRating: number; totalReviews: number };
 
 interface ReviewFormProps {
   productId: string;
   onReviewSubmitted?: () => void;
-  onStatsUpdate?: (stats: Stats) => void; // ✅ added this prop
+  onStatsUpdate?: (stats: Stats) => void;
+}
+
+async function submitReview(productId: string, rating: number, comment: string) {
+  return fetch("/api/reviews", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ productId, rating, comment }),
+  });
+}
+
+async function fetchStats(productId: string): Promise<Stats | null> {
+  try {
+    const res = await fetch(`/api/reviews/product/${productId}/stats`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      averageRating: Number(data.averageRating ?? 0),
+      totalReviews: Number(data.totalReviews ?? 0),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export default function ReviewForm({
@@ -21,50 +44,57 @@ export default function ReviewForm({
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
 
-    if (rating === 0) {
-      toast.error("Please select a rating");
-      return;
-    }
-    if (!comment.trim()) {
-      toast.error("Please write a review");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, rating, comment }),
-      });
-
-      if (!res.ok) throw new Error("Failed to submit review");
-
-      toast.success("Review submitted successfully!");
-      setRating(0);
-      setComment("");
-      onReviewSubmitted?.();
-
-      // ✅ Refetch stats after submission
-      if (onStatsUpdate) {
-        const statsRes = await fetch(`/api/reviews/product/${productId}/stats`);
-        if (statsRes.ok) {
-          const data = await statsRes.json();
-          onStatsUpdate({
-            averageRating: Number(data.averageRating ?? 0),
-            totalReviews: Number(data.totalReviews ?? 0),
-          });
-        }
+      if (!rating) {
+        toast.error("Please select a rating");
+        return;
       }
-    } catch (err) {
-      toast.error((err as Error).message || "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (!comment.trim()) {
+        toast.error("Please write a review");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await submitReview(productId, rating, comment);
+
+        if (res.status === 401) {
+          toast.error("Please log in to write a review.", {
+            action: { label: "Login", onClick: () => signIn() },
+          });
+          return;
+        }
+
+        if (!res.ok) {
+          const { error } = await res.json().catch(() => ({}));
+          throw new Error(error || "Failed to submit review");
+        }
+
+        toast.success("⭐ Thanks for your rating!", {
+          description: "Your review has been submitted successfully.",
+        });
+
+        // Reset form
+        setRating(0);
+        setComment("");
+        onReviewSubmitted?.();
+
+        // Refresh stats if callback provided
+        if (onStatsUpdate) {
+          const stats = await fetchStats(productId);
+          if (stats) onStatsUpdate(stats);
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [productId, rating, comment, onReviewSubmitted, onStatsUpdate]
+  );
 
   return (
     <form
@@ -74,7 +104,7 @@ export default function ReviewForm({
     >
       <div>
         <label className="block mb-1 font-medium">Your Rating</label>
-        <StarRating rating={rating} onChange={setRating} size={28} />
+        <RatingStar rating={rating} onChange={setRating} size={28} />
       </div>
 
       <div>
@@ -88,6 +118,8 @@ export default function ReviewForm({
           rows={4}
           placeholder="Share your experience..."
           className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          aria-required="true"
+          aria-invalid={!comment.trim()}
         />
       </div>
 
@@ -95,6 +127,7 @@ export default function ReviewForm({
         type="submit"
         disabled={loading}
         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        aria-busy={loading}
       >
         {loading ? "Submitting..." : "Submit Review"}
       </button>

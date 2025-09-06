@@ -2,14 +2,15 @@
 
 import React, { useCallback, useMemo } from "react";
 import Image from "next/image";
-import { Star, ShoppingCart } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
+import RatingStar from "@/components/reviews/RatingStar";
 import type { CartItem } from "@/types/CartItem";
 
-// -------------------- Types --------------------
+/* ---------------------- Types ---------------------- */
 interface BrandSize {
   size: string;
   price: number;
@@ -27,97 +28,59 @@ interface Category {
 }
 
 export interface Product {
-  id: string; // ✅ consistent id
+  id: string;
   slug: string;
   name: string;
   category: Category | null;
   description: string;
   quantity: number;
   brands: Brand[];
-  image?: string;      // main image
+  image?: string;
   images?: string[];
   discountPrice?: number;
   isOffer?: boolean;
-   rating?: number; // ✅ add this
+  rating?: number;
 }
 
 export interface ProductCardProps {
   product: Product;
+  isLoggedIn?: boolean;
 }
 
-// -------------------- Helpers --------------------
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+/* ---------------------- Utils ---------------------- */
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch data");
+  return res.json();
+};
 
-// -------------------- Rating Stars --------------------
-const RatingStars = React.memo(
-  ({
-    productId,
-    averageRating,
-    onRate,
-  }: {
-    productId: string;
-    averageRating: number;
-    onRate: (rating: number) => void;
-  }) => {
-    const [hovered, setHovered] = React.useState<number | null>(null);
-
-    return (
-      <div className="flex items-center gap-1">
-        {Array.from({ length: 5 }, (_, i) => {
-          const starIndex = i + 1;
-          const active = starIndex <= (hovered ?? averageRating);
-          return (
-            <Star
-              key={`${productId}-star-${i}`}
-              size={16}
-              className={
-                active
-                  ? "text-yellow-400 cursor-pointer"
-                  : "text-gray-300 cursor-pointer"
-              }
-              fill={active ? "yellow" : "none"}
-              onMouseEnter={(e) => {
-                e.stopPropagation();
-                setHovered(starIndex);
-              }}
-              onMouseLeave={(e) => {
-                e.stopPropagation();
-                setHovered(null);
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRate(starIndex);
-              }}
-            />
-          );
-        })}
-      </div>
-    );
-  }
-);
-RatingStars.displayName = "RatingStars";
-
-// -------------------- Product Card --------------------
-function ProductCardComponent({ product }: ProductCardProps) {
+/* ---------------------- Component ---------------------- */
+function ProductCard({ product, isLoggedIn = false }: ProductCardProps) {
   const router = useRouter();
   const addItem = useCartStore((state) => state.addItem);
 
+  /** --- Derived values --- */
   const brand = product.brands?.[0] ?? null;
   const size = brand?.sizes?.[0] ?? null;
 
   const originalPrice = size?.price ?? 0;
-  const discount = product.discountPrice ?? originalPrice;
-  const discountPercent =
-    originalPrice > 0
-      ? Math.round(((originalPrice - discount) / originalPrice) * 100)
-      : 0;
+  const finalPrice = product.discountPrice ?? originalPrice;
 
-  const { data: stats, mutate } = useSWR<{ averageRating: number }>(
+  const discountPercent = useMemo(() => {
+    return originalPrice > 0
+      ? Math.round(((originalPrice - finalPrice) / originalPrice) * 100)
+      : 0;
+  }, [originalPrice, finalPrice]);
+
+  /** --- SWR for rating --- */
+  const { data: stats, mutate, isLoading } = useSWR<{ averageRating: number }>(
     product.id ? `/api/reviews/product/${product.id}/stats` : null,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: false }
   );
   const averageRating = stats?.averageRating ?? 0;
 
+  /** --- Handlers --- */
   const handleAddToCart = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -129,13 +92,10 @@ function ProductCardComponent({ product }: ProductCardProps) {
       const item: CartItem = {
         productId: product.id,
         name: product.name,
-        price: Number(size.price),
-        discountPrice: Number(product.discountPrice ?? size.price),
+        price: size.price,
+        discountPrice: product.discountPrice ?? size.price,
         image: product.image?.trim() || "/no-image.png",
-        variant: {
-          brand: brand.brandName || "Unknown",
-          size: size.size || "Default",
-        },
+        variant: { brand: brand.brandName || "Unknown", size: size.size },
         quantity: 1,
       };
 
@@ -151,57 +111,73 @@ function ProductCardComponent({ product }: ProductCardProps) {
 
   const handleRate = useCallback(
     async (rating: number) => {
+      if (!isLoggedIn) {
+        toast.error("Please log in to rate products");
+        return;
+      }
       try {
         const res = await fetch(`/api/reviews/product/${product.id}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rating, comment: "" }),
         });
-        if (!res.ok) throw new Error();
+        if (!res.ok) throw new Error("Failed to submit rating");
+
         toast.success(`You rated ${product.name} ${rating} stars`);
         mutate();
       } catch {
         toast.error("Failed to submit rating");
       }
     },
-    [product, mutate]
+    [product, mutate, isLoggedIn]
   );
 
+  /** --- UI Fragments --- */
   const priceDisplay = useMemo(() => {
-    if (product.discountPrice) {
-      return (
-        <>
-          <span className="text-gray-400 text-sm line-through">
-            KES {originalPrice}
+    if (!originalPrice) return <span className="text-gray-500">N/A</span>;
+
+    return product.discountPrice ? (
+      <>
+        <span className="text-gray-400 text-sm line-through">
+          KES {originalPrice}
+        </span>
+        <span className="text-red-600 text-xl font-bold">KES {finalPrice}</span>
+        {discountPercent > 0 && (
+          <span className="text-green-600 text-xs font-semibold">
+            ({discountPercent}% OFF)
           </span>
-          <span className="text-red-600 text-xl font-bold">KES {discount}</span>
-          {discountPercent > 0 && (
-            <span className="text-green-600 text-xs font-semibold">
-              ({discountPercent}% OFF)
-            </span>
-          )}
-        </>
-      );
-    }
-    return (
+        )}
+      </>
+    ) : (
       <span className="text-black text-xl font-bold">KES {originalPrice}</span>
     );
-  }, [product.discountPrice, originalPrice, discount, discountPercent]);
+  }, [product.discountPrice, originalPrice, finalPrice, discountPercent]);
+
+  const ratingDisplay = isLoading ? (
+    <div className="animate-pulse h-4 w-24 bg-gray-200 rounded" />
+  ) : (
+    <RatingStar
+      productId={product.id}
+      averageRating={averageRating}
+      onRate={isLoggedIn ? handleRate : undefined}
+      size={14}
+    />
+  );
 
   return (
     <div
       onClick={handleNavigate}
-      className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition duration-300 border relative overflow-hidden flex flex-col justify-between cursor-pointer"
+      className="group bg-white rounded-2xl shadow-md hover:shadow-xl transition duration-300 border relative overflow-hidden flex flex-col justify-between cursor-pointer"
     >
-      {/* Image */}
-      <div className="relative h-64 w-full overflow-hidden">
+      {/* --- Product Image --- */}
+      <div className="relative h-64 w-full overflow-hidden bg-gray-100">
         <Image
           src={product.image || "/no-image.png"}
-          alt={product.name}
+          alt={product.name || "Product image"}
           fill
+          priority={false}
           className="object-cover group-hover:scale-110 transition-transform duration-500"
           sizes="(max-width: 768px) 50vw, 25vw"
-          loading="lazy"
         />
         {product.isOffer && (
           <div className="absolute top-3 left-3 bg-gradient-to-r from-pink-500 to-red-600 text-white text-xs px-3 py-1 rounded-full shadow-lg">
@@ -210,7 +186,7 @@ function ProductCardComponent({ product }: ProductCardProps) {
         )}
       </div>
 
-      {/* Info */}
+      {/* --- Product Info --- */}
       <div className="p-4 space-y-2">
         <h3 className="text-lg font-bold text-gray-800 flex items-center">
           {product.name}
@@ -220,27 +196,22 @@ function ProductCardComponent({ product }: ProductCardProps) {
             </span>
           )}
         </h3>
-        <p className="text-xs text-gray-500">{product.category?.name}</p>
-        <RatingStars
-          productId={product.id}
-          averageRating={averageRating}
-          onRate={handleRate}
-        />
+        <p className="text-xs text-gray-500 truncate">{product.category?.name}</p>
+        {ratingDisplay}
       </div>
 
-      {/* Price & Cart */}
+      {/* --- Price & Cart --- */}
       <div className="px-4 pb-3">
         <div className="flex items-center gap-2 mb-2">{priceDisplay}</div>
         <div className="flex justify-between items-center">
           <span className="text-xs bg-gray-100 px-3 py-1 rounded-full">
-            {product.quantity} in stock
+            {product.quantity > 0 ? `${product.quantity} in stock` : "Out of stock"}
           </span>
           <button
             onClick={handleAddToCart}
-            className={`bg-primary text-white p-3 rounded-full shadow-lg hover:scale-110 transition-transform ${
-              !brand || !size ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-            disabled={!brand || !size}
+            disabled={!brand || !size || product.quantity <= 0}
+            aria-label={`Add ${product.name} to cart`}
+            className="bg-primary text-white p-3 rounded-full shadow-lg hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ShoppingCart size={18} />
           </button>
@@ -250,5 +221,4 @@ function ProductCardComponent({ product }: ProductCardProps) {
   );
 }
 
-// ✅ Memoize entire card for grids
-export default React.memo(ProductCardComponent);
+export default React.memo(ProductCard);

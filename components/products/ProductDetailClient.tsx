@@ -5,91 +5,124 @@ import dynamic from "next/dynamic";
 import ProductGallery from "@/components/products/ProductGallery";
 import ProductTabs from "@/components/products/ProductTabs";
 import AddToCartButton from "@/components/products/AddToCartButton";
-import { Heart, Truck, RotateCcw } from "lucide-react";
+
 import { formatPrice } from "@/utils/price";
 import type { Product } from "@/types/product";
-import StarRating from "@/components/reviews/StarRating";
-import ReviewForm from "@/components/reviews/ReviewForm";
+import toast from "react-hot-toast";
+import WishlistButton from "@/components/wishlist/WishlistButton";
 
+// Lazy load heavy components
+const RatingStar = dynamic(() => import("@/components/reviews/RatingStar"));
+const ReviewForm = dynamic(() => import("@/components/reviews/ReviewForm"));
+const ReviewList = dynamic(() => import("@/components/reviews/ReviewList"));
 const WhatsAppMessageButton = dynamic(
   () => import("@/components/WhatsAppMessageButton"),
   { ssr: false }
 );
 
 type Stats = { averageRating: number; totalReviews: number };
+type ProductWithMongoId = Product & { _id?: string };
 
-export default function ProductDetailClient({ product }: { product: Product }) {
+function ProductDetailClient({ product }: { product: ProductWithMongoId }) {
   const [productUrl, setProductUrl] = useState("");
-  const [stats, setStats] = useState<Stats>({ averageRating: 0, totalReviews: 0 });
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
-  // Derived values (memoized for performance)
+  const productId: string = product.id ?? product._id ?? "";
+
+  // Prices
   const originalPrice = useMemo(
     () => product.brands?.[0]?.sizes?.[0]?.price ?? 0,
     [product.brands]
   );
-
   const discount = useMemo(
     () => product.discountPrice ?? originalPrice,
     [product.discountPrice, originalPrice]
   );
-
   const discountPercent = useMemo(
-    () => (originalPrice > 0 ? Math.round(((originalPrice - discount) / originalPrice) * 100) : 0),
+    () =>
+      originalPrice > 0
+        ? Math.round(((originalPrice - discount) / originalPrice) * 100)
+        : 0,
     [originalPrice, discount]
   );
 
-  const galleryImages = useMemo(
-    () => (product.images?.length ? product.images : [product.image]),
-    [product.images, product.image]
-  );
+  // Gallery
+  const galleryImages = useMemo(() => {
+    if (product.images?.length) return product.images.filter(Boolean);
+    return product.image ? [product.image] : ["/no-image.png"];
+  }, [product.images, product.image]);
 
-  // Capture current URL client-side
+  // Product URL
   useEffect(() => {
     if (typeof window !== "undefined") setProductUrl(window.location.href);
   }, []);
 
-  // Fetch product review stats
+  // Reviews stats
   useEffect(() => {
+    if (!productId) return;
     const controller = new AbortController();
 
-    fetch(`/api/reviews/product/${product.id}/stats`, {
-      signal: controller.signal,
-      cache: "no-cache",
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: Partial<Stats> | null) => {
-        if (data) {
-          setStats({
-            averageRating: Number(data.averageRating ?? 0),
-            totalReviews: Number(data.totalReviews ?? 0),
-          });
+    (async () => {
+      setLoadingStats(true);
+      try {
+        const res = await fetch(`/api/reviews/product/${productId}/stats`, {
+          signal: controller.signal,
+          cache: "no-cache",
+        });
+        if (!res.ok) throw new Error("Failed to fetch review stats");
+        const data: Partial<Stats> = await res.json();
+        setStats({
+          averageRating: Number(data.averageRating ?? 0),
+          totalReviews: Number(data.totalReviews ?? 0),
+        });
+      } catch (err) {
+        if (!(err instanceof DOMException)) {
+          toast.error("Failed to load reviews");
+          console.error("Stats fetch error:", err);
         }
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") console.error("Stats fetch error:", err);
-      });
+      } finally {
+        setLoadingStats(false);
+      }
+    })();
 
     return () => controller.abort();
-  }, [product.id]);
+  }, [productId]);
 
   return (
     <main className="max-w-7xl mx-auto py-16 px-4">
       <section className="grid md:grid-cols-2 gap-10">
-        {/* Product Images */}
-        <ProductGallery images={galleryImages} name={product.name} isOffer={product.isOffer} />
+        {/* Gallery */}
+        <ProductGallery
+          images={galleryImages}
+          name={product.name}
+          isOffer={product.isOffer}
+        />
 
-        {/* Product Info */}
+        {/* Right side */}
         <div className="flex flex-col justify-between">
           <div>
-            <h1 className="text-4xl font-extrabold text-primary mb-4">{product.name}</h1>
+            <h1 className="text-4xl font-extrabold text-primary mb-4">
+              {product.name}
+            </h1>
 
-            {/* Ratings */}
-            <div className="flex items-center mb-4">
-              <StarRating rating={stats.averageRating} size={24} />
-              <span className="ml-2 text-sm text-gray-500">
-                ({stats.averageRating.toFixed(1)} rating, {stats.totalReviews} reviews)
-              </span>
-            </div>
+            {/* Rating */}
+            {productId && (
+              <div className="flex items-center mb-4">
+                <RatingStar
+                  productId={productId}
+                  averageRating={stats?.averageRating ?? 0}
+                  size={24}
+                />
+                <span className="ml-2 text-sm text-gray-500">
+                  {loadingStats
+                    ? "Loading reviews..."
+                    : `(${stats?.averageRating?.toFixed(1) ?? 0} rating, ${
+                        stats?.totalReviews ?? 0
+                      } reviews)`}
+                </span>
+              </div>
+            )}
 
             {/* Description */}
             <p className="text-gray-600 mb-4">{product.description}</p>
@@ -106,14 +139,20 @@ export default function ProductDetailClient({ product }: { product: Product }) {
             <div className="flex items-center gap-4 mb-6">
               {product.discountPrice ? (
                 <>
-                  <span className="text-3xl font-bold text-red-600">{formatPrice(discount)}</span>
-                  <span className="text-lg line-through text-gray-400">{formatPrice(originalPrice)}</span>
+                  <span className="text-3xl font-bold text-red-600">
+                    {formatPrice(discount)}
+                  </span>
+                  <span className="text-lg line-through text-gray-400">
+                    {formatPrice(originalPrice)}
+                  </span>
                   <span className="text-green-600 font-semibold text-sm">
                     ({discountPercent}% OFF)
                   </span>
                 </>
               ) : (
-                <span className="text-3xl font-bold text-black">{formatPrice(originalPrice)}</span>
+                <span className="text-3xl font-bold text-black">
+                  {formatPrice(originalPrice)}
+                </span>
               )}
             </div>
 
@@ -122,9 +161,9 @@ export default function ProductDetailClient({ product }: { product: Product }) {
               <div className="mb-8">
                 <h3 className="font-semibold mb-2 text-lg">Available Sizes:</h3>
                 <div className="flex flex-wrap gap-3">
-                  {product.brands[0].sizes.map((size, idx) => (
+                  {product.brands[0].sizes.map((size) => (
                     <span
-                      key={idx}
+                      key={size.size}
                       className="px-4 py-2 bg-gray-100 rounded-full text-sm font-medium"
                     >
                       {size.size} - {formatPrice(size.price)}
@@ -137,12 +176,10 @@ export default function ProductDetailClient({ product }: { product: Product }) {
             {/* Action Buttons */}
             <div className="flex gap-4 mb-6">
               <AddToCartButton product={product} />
-              <button
-                className="border border-gray-300 text-primary p-3 rounded-xl hover:scale-105"
-                aria-label="Add to wishlist"
-              >
-                <Heart />
-              </button>
+
+              {/* ❤️ Wishlist Button */}
+              <WishlistButton product={product} className="p-3 rounded-xl" />
+
               <WhatsAppMessageButton
                 productName={product.name}
                 variant={product.brands?.[0]?.sizes?.[0]?.size}
@@ -152,24 +189,34 @@ export default function ProductDetailClient({ product }: { product: Product }) {
               />
             </div>
 
-            {/* Review Form */}
-            <ReviewForm productId={product.id} onStatsUpdate={setStats} />
+            {/* Reviews */}
+            {productId && (
+              <section id="reviews" className="mt-12">
+                <h2 className="text-2xl font-bold mb-4">Customer Reviews</h2>
+                <ReviewForm productId={productId} onStatsUpdate={setStats} />
+                <div className="mt-8">
+                  <ReviewList productId={productId} />
+                </div>
+              </section>
+            )}
           </div>
 
-          {/* Extra Info */}
+          {/* Footer info */}
           <div className="flex flex-col md:flex-row gap-8 text-sm text-gray-600 mt-6">
             <div className="flex items-center gap-3">
-              <Truck /> Free Shipping over KSh 100,000
+              <span className="text-green-600">🚚</span> Free Shipping over KSh
+              100,000
             </div>
             <div className="flex items-center gap-3">
-              <RotateCcw /> 30-Day Return Guarantee
+              <span className="text-blue-600">↩️</span> 30-Day Return Guarantee
             </div>
           </div>
         </div>
       </section>
 
-      {/* Tabs */}
       <ProductTabs description={product.description} />
     </main>
   );
 }
+
+export default ProductDetailClient;
