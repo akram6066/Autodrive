@@ -7,7 +7,9 @@ const nextConfig = {
   },
   images: {
     
-     domains: ["lh3.googleusercontent.com"], // ✅ allow Google avatars
+     domains: ["lh3.googleusercontent.com",
+      "ik.imagekit.io", 
+     ], // ✅ allow Google avatars
   },
 };
 
