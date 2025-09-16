@@ -1,51 +1,33 @@
-import { NextResponse } from "next/server";
+// scripts/fixBrokenCategoryImages.ts
 import dbConnect from "@/lib/dbConnect";
 import Category from "@/models/Category";
-import path from "path";
-import fs from "fs/promises";
-import slugify from "slugify";
 
-// GET all categories
-export async function GET() {
-  await dbConnect();
-  const categories = await Category.find().sort({ createdAt: -1 });
-  return NextResponse.json(categories);
-}
-
-// POST create category with image upload
-export async function POST(request: Request) {
+async function fixBrokenCategoryImages() {
   await dbConnect();
 
-  const formData = await request.formData();
-  const name = formData.get("name")?.toString() ?? "";
-  const file = formData.get("image") as File | null;
+  // Find all categories where the image has "categories/categories"
+  const brokenCategories = await Category.find({ image: /categories\/categories/ });
 
-  if (!name.trim()) {
-    return NextResponse.json({ error: "Category name is required" }, { status: 400 });
+  if (brokenCategories.length === 0) {
+    console.log("🎉 No broken category images found!");
+    process.exit(0);
   }
 
-  const slug = slugify(name, { lower: true });
-  const exist = await Category.findOne({ slug });
-  if (exist) {
-    return NextResponse.json({ error: "Category already exists" }, { status: 400 });
+  for (const category of brokenCategories) {
+    const oldUrl = category.image;
+    const newUrl = oldUrl.replace("categories/categories", "categories");
+
+    category.image = newUrl;
+    await category.save();
+
+    console.log(`✅ Fixed ${category.slug}: ${oldUrl} → ${newUrl}`);
   }
 
-  let imagePath = "";
-  if (file && file.size > 0) {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const uploadDir = path.join(process.cwd(), "public/uploads/categories");
-    await fs.mkdir(uploadDir, { recursive: true });
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(uploadDir, fileName);
-    await fs.writeFile(filePath, buffer);
-    imagePath = `/uploads/categories/${fileName}`;
-  }
-
-  const newCategory = await Category.create({
-    name,
-    slug,
-    image: imagePath
-  });
-
-  return NextResponse.json(newCategory, { status: 201 });
+  console.log("🚀 Broken category images fixed and saved.");
+  process.exit(0);
 }
+
+fixBrokenCategoryImages().catch((err) => {
+  console.error("❌ Fix script failed:", err);
+  process.exit(1);
+});

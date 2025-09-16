@@ -3,7 +3,7 @@ import ProductCard, { Product as ProductCardType } from "@/components/products/P
 import { absoluteFetch } from "@/lib/absoluteFetch";
 import type { Metadata } from "next";
 
-// Types from API
+// ---------------- Types ----------------
 interface BrandSize {
   size: string;
   price: number;
@@ -25,7 +25,7 @@ interface ProductFromAPI {
   _id: string;
   slug: string;
   name: string;
-  category: CategoryFromAPI;
+  category: CategoryFromAPI | null;
   description: string;
   quantity: number;
   brands: Brand[];
@@ -35,7 +35,17 @@ interface ProductFromAPI {
   rating?: number;
 }
 
-// -------- Fetch functions --------
+// ---------------- Helpers ----------------
+/**
+ * Returns a valid image URL or a local fallback if missing/broken.
+ */
+function getSafeImage(image?: string): string {
+  if (!image) return "/no-image.png";
+  if (image.startsWith("http") && !image.includes("/uploads/")) return image;
+  return "/no-image.png";
+}
+
+// ---------------- Fetch functions ----------------
 async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> {
   try {
     return await absoluteFetch<CategoryFromAPI>(`/api/categories/${slug}`, {
@@ -45,7 +55,6 @@ async function getCategoryBySlug(slug: string): Promise<CategoryFromAPI | null> 
     return null;
   }
 }
-
 
 async function getProductsByCategoryId(categoryId: string): Promise<ProductFromAPI[]> {
   try {
@@ -57,7 +66,7 @@ async function getProductsByCategoryId(categoryId: string): Promise<ProductFromA
   }
 }
 
-// -------- Metadata for SEO --------
+// ---------------- Metadata for SEO ----------------
 export async function generateMetadata({
   params,
 }: {
@@ -79,7 +88,7 @@ export async function generateMetadata({
     openGraph: {
       images: [
         {
-          url: category.image || "/no-image.png",
+          url: getSafeImage(category.image),
           width: 800,
           height: 600,
         },
@@ -88,7 +97,7 @@ export async function generateMetadata({
   };
 }
 
-// -------- Page Component --------
+// ---------------- Page Component ----------------
 export default async function ProductsByCategory({
   params,
 }: {
@@ -116,10 +125,11 @@ export default async function ProductsByCategory({
           {products.map((product) => {
             const productForCard: ProductCardType = {
               ...product,
-              id: product._id, // ✅ map _id → id for ProductCard
+              id: product._id, // ✅ normalize id
+              image: getSafeImage(product.image), // ✅ safe image
               category: product.category
                 ? {
-                    id: product.category._id, // ✅ map _id → id for category
+                    id: product.category._id,
                     name: product.category.name,
                     slug: product.category.slug,
                   }
