@@ -20,37 +20,25 @@ async function main(dryRun: boolean) {
   await mongoose.connect(process.env.MONGODB_URI as string);
   console.log("✅ Connected to MongoDB");
 
-  const categories = await Category.find({
+  const brokenCategories = await Category.find({
     image: /ik\.imagekit\.io/,
   });
 
-  if (!categories.length) {
-    console.log("🎉 No category images found.");
+  if (!brokenCategories.length) {
+    console.log("🎉 No broken category images found.");
     return;
   }
 
-  console.log(`Found ${categories.length} categories with images to check:`);
+  console.log(`Found ${brokenCategories.length} categories with broken images:`);
 
-  for (const cat of categories) {
-    let fixedUrl = cat.image;
+  for (const cat of brokenCategories) {
+    const fixedUrl = cat.image.replace("ik.imagekit.io/syk5c8kkg/", "ik.imagekit.io/syk5c8kkg/categories/");
 
-    // ✅ only fix if "categories/" is missing
-    if (!fixedUrl.includes("/categories/")) {
-      fixedUrl = fixedUrl.replace(
-        "ik.imagekit.io/syk5c8kkg/",
-        "ik.imagekit.io/syk5c8kkg/categories/"
-      );
-    }
+    console.log(`- ${cat.slug}: ${cat.image} → ${fixedUrl}`);
 
-    if (fixedUrl !== cat.image) {
-      console.log(`- ${cat.slug}: ${cat.image} → ${fixedUrl}`);
-
-      if (!dryRun) {
-        cat.image = fixedUrl;
-        await cat.save();
-      }
-    } else {
-      console.log(`- ${cat.slug}: already correct ✅`);
+    if (!dryRun) {
+      cat.image = fixedUrl;
+      await cat.save();
     }
   }
 

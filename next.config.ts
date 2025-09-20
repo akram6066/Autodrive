@@ -2,14 +2,20 @@
 const nextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",  // ✅ Increase upload limit
+      bodySizeLimit: "10mb", // ✅ Increase upload limit
     },
   },
   images: {
-    
-     domains: ["lh3.googleusercontent.com",
-      "ik.imagekit.io", 
-     ], // ✅ allow Google avatars
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+      {
+        protocol: "https",
+        hostname: "ik.imagekit.io",
+      },
+    ],
   },
 };
 
